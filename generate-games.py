@@ -1,4 +1,5 @@
 import json
+import locale
 import os
 from pathlib import Path
 
@@ -42,6 +43,7 @@ LETTERS_INV = {
 class Word(BaseModel):
     original: str
     normalized: str
+    is_pangram: bool
 
 
 class Game(BaseModel):
@@ -51,6 +53,8 @@ class Game(BaseModel):
 
 
 def main():
+    locale.setlocale(locale.LC_ALL, "pt_BR.UTF-8")
+
     print("Loading pt-br/listas/verbos...")
     with open(Path(os.environ["src"]).joinpath("listas/verbos")) as f:
         verbs = {line for line in f}
@@ -82,16 +86,17 @@ def main():
                     Word(
                         original=word_original,
                         normalized=word_normalized,
+                        is_pangram=len(letters_word) == 7,
                     )
                 )
                 if len(letters_word) == 7:
-                    pangrams.add("".join(sorted(letters_word)))
+                    pangrams.add("".join(sorted(letters_word, key=locale.strxfrm)))
 
     print(f"Found {len(words)} words and {len(pangrams)} playable letter combinations!")
 
     games: list[Game] = []
     print("Populating games...")
-    for pangram in tqdm(sorted(pangrams)):
+    for pangram in tqdm(sorted(pangrams, key=locale.strxfrm)):
         letters_pangram: dict[str, dict[str, list[Word]]] = {
             letter: {} for letter in pangram
         }
@@ -101,25 +106,33 @@ def main():
                 for letter in word.normalized:
                     letters_pangram[letter].setdefault(word.normalized, []).append(word)
 
-        for letter, words_dict in sorted(letters_pangram.items(), key=lambda x: x[0]):
+        for letter, words_dict in sorted(
+            letters_pangram.items(), key=lambda x: locale.strxfrm(x[0])
+        ):
             words_game: list[Word] = []
             for normalized, words_list in sorted(
                 words_dict.items(), key=lambda x: x[0]
             ):
                 words_game.append(
                     Word(
-                        original="/".join(sorted(set(p.original for p in words_list))),
+                        original="/".join(
+                            sorted(
+                                set(p.original for p in words_list),
+                                key=locale.strxfrm,
+                            )
+                        ),
                         normalized=normalized,
+                        is_pangram=words_list[0].is_pangram,
                     )
                 )
             games.append(
                 Game(
                     main_letter=letter,
-                    secondary_letters=sorted(
+                    secondary_letters=[
                         letter_pangram
                         for letter_pangram in pangram
                         if letter_pangram != letter
-                    ),
+                    ],
                     words=words_game,
                 )
             )

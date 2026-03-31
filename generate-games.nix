@@ -17,4 +17,5 @@ pkgs.runCommand "soletra-rs-games.json" {
     hash = "sha256-HrBYUdUxWfLGMVOwhMoamWU92oqcIQ0UC6pwOZdQpKU=";
   };
   nativeBuildInputs = [ python3 ];
+  LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
 } "python3 ${./generate-games.py}"

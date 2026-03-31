@@ -1,18 +1,11 @@
-use serde::Deserialize;
+mod app;
+mod game;
+mod normalize;
 
-#[derive(Deserialize)]
-struct Word {
-    original: String,
-    normalized: String,
-}
+use crate::app::App;
 
-#[derive(Deserialize)]
-struct Game {
-    main_letter: char,
-    secondary_letters: [char; 6],
-    words: Vec<Word>,
-}
-
-fn main() {
-    println!("Hello, world!");
+fn main() -> color_eyre::Result<()> {
+    color_eyre::install()?;
+    ratatui::run(|terminal| App::init().run(terminal))?;
+    Ok(())
 }
