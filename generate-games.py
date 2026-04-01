@@ -111,7 +111,7 @@ def main():
         ):
             words_game: list[Word] = []
             for normalized, words_list in sorted(
-                words_dict.items(), key=lambda x: x[0]
+                words_dict.items(), key=lambda x: (len(x[0]), locale.strxfrm(x[0]))
             ):
                 words_game.append(
                     Word(

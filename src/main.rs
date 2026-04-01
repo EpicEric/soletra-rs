@@ -5,8 +5,11 @@ mod widgets;
 
 use crate::app::App;
 
-fn main() -> color_eyre::Result<()> {
+#[tokio::main]
+async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
-    ratatui::run(|terminal| App::init().run(terminal))?;
-    Ok(())
+    let mut terminal = ratatui::init();
+    let result = App::init().run(&mut terminal).await;
+    ratatui::restore();
+    result
 }

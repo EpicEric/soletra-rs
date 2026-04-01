@@ -1549,6 +1549,7 @@ dependencies = [
  "serde_duper",
  "serde_json",
  "tokio",
+ "tui-scrollview",
 ]
 
 [[package]]
@@ -1819,6 +1820,17 @@ dependencies = [
  "sharded-slab",
  "thread_local",
  "tracing-core",
+]
+
+[[package]]
+name = "tui-scrollview"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1327d4a328e2aab9fd0b588d9009ee4d5256d9b61ad23a50ec0e80722b76e33"
+dependencies = [
+ "indoc",
+ "ratatui-core",
+ "ratatui-widgets",
 ]
 
 [[package]]

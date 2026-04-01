@@ -3,21 +3,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::normalize::NormalizedString;
 
-#[derive(Deserialize, Clone, Hash)]
+#[derive(Deserialize, Debug, Clone, Hash)]
 pub(crate) struct Word {
     pub(crate) original: String,
     pub(crate) normalized: NormalizedString,
     pub(crate) is_pangram: bool,
 }
 
-#[derive(Deserialize, Clone, Hash)]
+#[derive(Deserialize, Debug, Clone, Hash)]
 pub(crate) struct Game {
     pub(crate) main_letter: char,
     pub(crate) secondary_letters: [char; 6],
     pub(crate) words: Vec<Word>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ActiveGameWord {
     pub(crate) original: String,
     pub(crate) normalized: NormalizedString,
@@ -26,7 +26,7 @@ pub(crate) struct ActiveGameWord {
     pub(crate) points: u16,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ActiveGame {
     pub(crate) main_letter: char,
     pub(crate) original_secondary_letters: [char; 6],
@@ -102,13 +102,15 @@ impl ActiveGame {
         let Ok(normalized_guess): Result<NormalizedString, _> = guess.parse() else {
             return GuessResult::Failure(BadGuess::InvalidCharacters);
         };
-        if normalized_guess.as_ref().chars().any(|char| {
-            char != self.main_letter || !self.original_secondary_letters.contains(&char)
-        }) {
-            return GuessResult::Failure(BadGuess::InvalidCharacters);
-        }
 
-        if normalized_guess.as_ref().len() < 4 {
+        let mut count = 0usize;
+        for char in normalized_guess.as_ref().chars() {
+            if char != self.main_letter && !self.original_secondary_letters.contains(&char) {
+                return GuessResult::Failure(BadGuess::InvalidCharacters);
+            }
+            count += 1;
+        }
+        if count < 4 {
             return GuessResult::Failure(BadGuess::TooShort);
         }
 
