@@ -1,8 +1,11 @@
 use rand::{RngExt, SeedableRng, rngs::SmallRng};
-use ratatui::{DefaultTerminal, Frame, style::Stylize, text::Line, widgets::Paragraph};
+use ratatui::{DefaultTerminal, Frame, widgets::Paragraph};
 use serde::{Deserialize, Serialize};
 
-use crate::game::{ActiveGame, Game};
+use crate::{
+    game::{ActiveGame, Game},
+    widgets::Honeycomb,
+};
 
 const GAMES: &str = include_str!("games.json");
 
@@ -15,6 +18,7 @@ pub(crate) struct AppData {
 pub(crate) struct App {
     data: AppData,
     games: Option<Vec<Game>>,
+    input: String,
 }
 
 impl App {
@@ -22,6 +26,7 @@ impl App {
         App {
             data: AppData::default(),
             games: None,
+            input: String::new(),
         }
     }
 
@@ -34,9 +39,9 @@ impl App {
                         let index = {
                             let mut rng = SmallRng::seed_from_u64(42);
                             let _ = (&mut rng).random_iter::<u64>().take(self.data.current_game);
-                            rng.random_range(0..games.len())
+                            rng.random_range(0..games.len() as u64)
                         };
-                        if let Some(game) = games.get(index) {
+                        if let Some(game) = games.get(index as usize) {
                             terminal.draw(|frame| App::render_loading(frame))?;
                             self.data.active_games.push(game.clone().into());
                         } else {
@@ -62,24 +67,22 @@ impl App {
     }
 
     fn render_game(frame: &mut Frame, game: &mut ActiveGame) {
-        frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                game.main_letter.bold(),
-                game.secondary_letters
-                    .into_iter()
-                    .collect::<String>()
-                    .not_bold(),
-            ])),
-            frame.area(),
-        );
+        let honeycomb = Honeycomb {
+            main_letter: game.main_letter,
+            secondary_letters: game.secondary_letters,
+        };
+        frame.render_widget(honeycomb, frame.area());
     }
 
     fn render_loading(frame: &mut Frame) {
-        frame.render_widget("Carregando...", frame.area());
+        frame.render_widget(Paragraph::new("Carregando...").centered(), frame.area());
     }
 
     fn render_no_more_games(frame: &mut Frame) {
-        frame.render_widget("Você terminou todos os jogos. Parabéns!", frame.area());
+        frame.render_widget(
+            Paragraph::new("Você terminou todos os jogos. Parabéns!").centered(),
+            frame.area(),
+        );
     }
 
     fn handle_events(&mut self) -> color_eyre::Result<()> {

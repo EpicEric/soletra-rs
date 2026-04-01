@@ -1,6 +1,7 @@
 mod app;
 mod game;
 mod normalize;
+mod widgets;
 
 use crate::app::App;
 

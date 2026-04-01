@@ -38,9 +38,10 @@ pub(crate) struct ActiveGame {
 }
 
 pub(crate) enum BadGuess {
-    AlreadyDiscovered,
     InvalidCharacters,
+    TooShort,
     WordNotInGame,
+    AlreadyDiscovered,
 }
 
 pub(crate) enum GuessResult {
@@ -54,12 +55,12 @@ pub(crate) enum GuessResult {
 
 impl From<Word> for ActiveGameWord {
     fn from(value: Word) -> Self {
-        let mut points = value.original.len() as u16;
-        if value.original.len() > 5 {
-            points += 2;
+        let mut points = 1;
+        if value.original.len() > 4 {
+            points = value.original.len() as u16;
         }
         if value.is_pangram {
-            points += 2;
+            points *= 2;
         }
         ActiveGameWord {
             original: value.original,
@@ -105,6 +106,10 @@ impl ActiveGame {
             char != self.main_letter || !self.original_secondary_letters.contains(&char)
         }) {
             return GuessResult::Failure(BadGuess::InvalidCharacters);
+        }
+
+        if normalized_guess.as_ref().len() < 4 {
+            return GuessResult::Failure(BadGuess::TooShort);
         }
 
         let Some(word) = self
