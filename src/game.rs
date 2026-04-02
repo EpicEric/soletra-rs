@@ -46,6 +46,7 @@ pub(crate) enum BadGuess {
 
 pub(crate) enum GuessResult {
     Success {
+        index: usize,
         points: u16,
         is_pangram: bool,
         is_game_over: bool,
@@ -114,10 +115,11 @@ impl ActiveGame {
             return GuessResult::Failure(BadGuess::TooShort);
         }
 
-        let Some(word) = self
+        let Some((index, word)) = self
             .words
             .iter_mut()
-            .find(|word| word.normalized == normalized_guess)
+            .enumerate()
+            .find(|(_, word)| word.normalized == normalized_guess)
         else {
             return GuessResult::Failure(BadGuess::WordNotInGame);
         };
@@ -129,6 +131,7 @@ impl ActiveGame {
             self.points += word.points;
             self.found_words += 1;
             GuessResult::Success {
+                index,
                 points: word.points,
                 is_pangram: word.is_pangram,
                 is_game_over: self.found_words == self.words.len(),

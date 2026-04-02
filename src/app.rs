@@ -9,7 +9,7 @@ use rand::{
 };
 use ratatui::{
     DefaultTerminal, Frame,
-    layout::{Constraint, Layout, Position, Rect},
+    layout::{Constraint, Flex, Layout, Offset, Position, Rect},
     widgets::Paragraph,
 };
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,7 @@ use tui_scrollview::ScrollViewState;
 
 use crate::{
     game::{ActiveGame, Game, GuessResult},
-    widgets::{GuessesWidget, HoneycombWidget, InputWidget},
+    widgets::{ActionsWidget, GuessesWidget, HoneycombWidget, InputWidget},
 };
 
 const GAMES: &str = include_str!("games.json");
@@ -190,9 +190,15 @@ impl App {
         scroll_view_state: &mut ScrollViewState,
     ) {
         let [left_area, right_area] =
-            Layout::horizontal([Constraint::Length(17), Constraint::Fill(1)]).areas(frame.area());
-        let [honeycomb_area, input_area] =
-            Layout::vertical([Constraint::Length(9), Constraint::Length(3)]).areas(left_area);
+            Layout::horizontal([Constraint::Length(21), Constraint::Fill(1)]).areas(frame.area());
+        let [honeycomb_area, input_area, actions_area] = Layout::vertical([
+            Constraint::Length(9),
+            Constraint::Length(3),
+            Constraint::Length(3),
+        ])
+        .flex(Flex::Center)
+        .spacing(1)
+        .areas(left_area);
 
         let mut honeycomb = HoneycombWidget {
             main_letter: game.main_letter,
@@ -214,14 +220,30 @@ impl App {
         areas.button_five = honeycomb.area_button_five;
         areas.button_six = honeycomb.area_button_six;
 
-        let input = InputWidget { input };
-        frame.render_widget(input, input_area);
+        let mut input = InputWidget {
+            input,
+            cursor_position: Position::default(),
+        };
+        frame.render_widget(&mut input, input_area);
+        frame.set_cursor_position(input.cursor_position);
 
-        let guesses = GuessesWidget {
+        let mut actions = ActionsWidget {
+            area_button_submit: areas.button_submit,
+            area_button_shuffle: areas.button_shuffle,
+            area_button_reset_shuffle: areas.button_reset_shuffle,
+            area_button_clear: areas.button_clear,
+        };
+        frame.render_widget(&mut actions, actions_area);
+        areas.button_submit = actions.area_button_submit;
+        areas.button_shuffle = actions.area_button_shuffle;
+        areas.button_reset_shuffle = actions.area_button_reset_shuffle;
+        areas.button_clear = actions.area_button_clear;
+
+        let mut guesses = GuessesWidget {
             guesses: &game.words,
             scroll_view_state,
         };
-        frame.render_widget(guesses, right_area);
+        frame.render_widget(&mut guesses, right_area);
     }
 
     fn render_loading(frame: &mut Frame) {
@@ -253,7 +275,7 @@ impl App {
                             self.result = None;
                             self.data.current_game += 1;
                         }
-                        (KeyCode::Char(c), Some(_)) => {
+                        (KeyCode::Char(c), Some(_)) if self.input.chars().count() < 17 => {
                             self.input.push(c);
                         }
                         (KeyCode::Backspace, Some(_)) => {
@@ -261,14 +283,28 @@ impl App {
                         }
                         (KeyCode::Enter, Some(game)) => {
                             let result = game.guess(&self.input);
+                            if let GuessResult::Success { index, .. } = &result {
+                                self.scroll_view_state.set_offset(Position {
+                                    x: ((index / 3) * 23).saturating_sub(1) as u16,
+                                    y: 0,
+                                });
+                            }
                             self.result = Some((result, Instant::now()));
                             self.input.clear();
                         }
                         (KeyCode::Right, _) => {
-                            self.scroll_view_state.scroll_right();
+                            self.scroll_view_state.set_offset(
+                                self.scroll_view_state
+                                    .offset()
+                                    .offset(Offset { x: 5, y: 0 }),
+                            );
                         }
                         (KeyCode::Left, _) => {
-                            self.scroll_view_state.scroll_left();
+                            self.scroll_view_state.set_offset(
+                                self.scroll_view_state
+                                    .offset()
+                                    .offset(Offset { x: -5, y: 0 }),
+                            );
                         }
                         _ => {}
                     }
@@ -279,26 +315,28 @@ impl App {
                     && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
                 {
                     let position = Position::new(mouse.column, mouse.row);
-                    if self.areas.button_main.contains(position) {
-                        self.input.push(game.main_letter);
-                    }
-                    if self.areas.button_one.contains(position) {
-                        self.input.push(game.secondary_letters[0]);
-                    }
-                    if self.areas.button_two.contains(position) {
-                        self.input.push(game.secondary_letters[1]);
-                    }
-                    if self.areas.button_three.contains(position) {
-                        self.input.push(game.secondary_letters[2]);
-                    }
-                    if self.areas.button_four.contains(position) {
-                        self.input.push(game.secondary_letters[3]);
-                    }
-                    if self.areas.button_five.contains(position) {
-                        self.input.push(game.secondary_letters[4]);
-                    }
-                    if self.areas.button_six.contains(position) {
-                        self.input.push(game.secondary_letters[5]);
+                    if self.input.chars().count() < 17 {
+                        if self.areas.button_main.contains(position) {
+                            self.input.push(game.main_letter);
+                        }
+                        if self.areas.button_one.contains(position) {
+                            self.input.push(game.secondary_letters[0]);
+                        }
+                        if self.areas.button_two.contains(position) {
+                            self.input.push(game.secondary_letters[1]);
+                        }
+                        if self.areas.button_three.contains(position) {
+                            self.input.push(game.secondary_letters[2]);
+                        }
+                        if self.areas.button_four.contains(position) {
+                            self.input.push(game.secondary_letters[3]);
+                        }
+                        if self.areas.button_five.contains(position) {
+                            self.input.push(game.secondary_letters[4]);
+                        }
+                        if self.areas.button_six.contains(position) {
+                            self.input.push(game.secondary_letters[5]);
+                        }
                     }
                     if self.areas.button_shuffle.contains(position) {
                         game.shuffle();
@@ -311,6 +349,12 @@ impl App {
                     }
                     if self.areas.button_submit.contains(position) {
                         let result = game.guess(&self.input);
+                        if let GuessResult::Success { index, .. } = &result {
+                            self.scroll_view_state.set_offset(Position {
+                                x: ((index / 3) * 23).saturating_sub(1) as u16,
+                                y: 0,
+                            });
+                        }
                         self.result = Some((result, Instant::now()));
                         self.input.clear();
                     }
