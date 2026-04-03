@@ -6,7 +6,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from tqdm import tqdm
 
-MAX_SCORE = 16.0
+MAX_SCORE = 18.0
 
 LETTERS = {
     "a": "aáàãâ",
@@ -56,32 +56,34 @@ def main():
     locale.setlocale(locale.LC_ALL, "pt_BR.UTF-8")
 
     print("Loading pt-br/listas/verbos...")
-    with open(Path(os.environ["src"]).joinpath("listas/verbos")) as f:
-        verbs = {line for line in f}
+    with open(Path(os.environ["pt-br"]).joinpath("listas/verbos")) as f:
+        verbs = {line.lower().strip() for line in f}
 
-    print("Loading pt-br/conjugações...")
-    with open(Path(os.environ["src"]).joinpath("conjugações")) as f:
-        conjugations = {line for line in f if line not in verbs}
+    print("Loading lista-de-palavras.txt...")
+    with open(Path(os.environ["lista-de-palavras"])) as f:
+        sensible_word_list = {line.lower().strip() for line in f}
 
     words: list[Word] = []
     pangrams: set[str] = set()
     print("Loading pt-br/icf...")
-    with open(Path(os.environ["src"]).joinpath("icf")) as f:
+    with open(Path(os.environ["pt-br"]).joinpath("icf")) as f:
         for line in f:
             word_original, score = line.split(",", 1)
             if float(score) >= MAX_SCORE:
                 break
-            if word_original in conjugations:
-                continue
             letters_word: set[str] = set()
             word_normalized: str | None = ""
-            for letter in word_original:
+            for letter in word_original.lower():
                 if (normalized_letter := LETTERS_INV.get(letter)) is None:
                     word_normalized = None
                     break
                 word_normalized += normalized_letter
                 letters_word.add(normalized_letter)
             if word_normalized and len(letters_word) <= 7 and len(word_original) >= 4:
+                if word_original not in verbs and (
+                    word_normalized.lower().replace("ç", "c") not in sensible_word_list
+                ):
+                    continue
                 words.append(
                     Word(
                         original=word_original,
