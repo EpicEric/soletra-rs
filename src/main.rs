@@ -9,7 +9,7 @@ use crate::app::App;
 async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let mut terminal = ratatui::init();
-    let result = App::init().run(&mut terminal).await;
+    let result = App::init().await.run(&mut terminal).await;
     ratatui::restore();
     result
 }

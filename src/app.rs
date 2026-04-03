@@ -13,8 +13,11 @@ use ratatui::{
     widgets::Paragraph,
 };
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
-use tokio::{sync::mpsc, time::interval};
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
+use tokio::{fs, sync::mpsc, time::interval};
 use tui_scrollview::ScrollViewState;
 
 use crate::{
@@ -25,11 +28,18 @@ use crate::{
 const GAMES: &str = include_str!("games.json");
 const FPS: u64 = 60;
 const FRAME_DURATION: Duration = Duration::from_millis(1_000 / FPS);
+const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
+    name: "SoletraRs",
+    author: "EpicEric",
+};
+const SAVE_DATA: &str = "save.json";
 
 #[derive(Default, Serialize, Deserialize)]
 pub(crate) struct AppData {
     pub(crate) active_games: Vec<ActiveGame>,
     pub(crate) current_game: usize,
+    #[serde(skip)]
+    pub(crate) app_dir: Option<PathBuf>,
 }
 
 pub(crate) struct App {
@@ -65,10 +75,38 @@ pub(crate) enum AppEvent {
     GamesLoaded(Vec<Game>),
 }
 
+impl AppData {
+    async fn init() -> color_eyre::Result<Self> {
+        let dir = app_dirs2::get_app_root(app_dirs2::AppDataType::UserData, &APP_INFO)?;
+        let save_path = dir.join(SAVE_DATA);
+        if save_path.exists() && save_path.is_file() {
+            let data: AppData = serde_json::from_slice(&fs::read(&save_path).await?)?;
+            Ok(AppData {
+                app_dir: Some(dir),
+                ..data
+            })
+        } else {
+            Ok(AppData {
+                app_dir: Some(dir),
+                ..Default::default()
+            })
+        }
+    }
+
+    async fn save(&self) -> color_eyre::Result<()> {
+        if let Some(dir) = self.app_dir.as_ref() {
+            let save_path = dir.join(SAVE_DATA);
+            fs::create_dir_all(dir).await?;
+            fs::write(&save_path, serde_json::to_vec(self)?).await?;
+        }
+        Ok(())
+    }
+}
+
 impl App {
-    pub(crate) fn init() -> Self {
+    pub(crate) async fn init() -> Self {
         App {
-            data: AppData::default(),
+            data: AppData::init().await.unwrap_or_default(),
             games: None,
             result: None,
             input: String::new(),
@@ -95,7 +133,7 @@ impl App {
         loop {
             // Handle events
             while let Ok(event) = rx.try_recv() {
-                self.handle_event(event)?;
+                self.handle_event(event).await?;
                 if self.should_quit {
                     crossterm::execute!(terminal.backend_mut(), DisableMouseCapture)?;
                     return Ok(());
@@ -103,12 +141,12 @@ impl App {
             }
 
             // Render terminal
-            self.render(terminal, &tx)?;
+            self.render(terminal, &tx).await?;
             frame_interval.tick().await;
         }
     }
 
-    fn render(
+    async fn render(
         &mut self,
         terminal: &mut DefaultTerminal,
         tx: &mpsc::UnboundedSender<AppEvent>,
@@ -128,6 +166,7 @@ impl App {
                     if let Some(game) = games.get(index) {
                         self.data.active_games.push(game.clone().into());
                         self.data.current_game = self.data.active_games.len() - 1;
+                        self.data.save().await?;
                         let game = self
                             .data
                             .active_games
@@ -250,7 +289,7 @@ impl App {
         frame.render_widget(Paragraph::new("Carregando...").centered(), frame.area());
     }
 
-    fn handle_event(&mut self, event: AppEvent) -> color_eyre::Result<()> {
+    async fn handle_event(&mut self, event: AppEvent) -> color_eyre::Result<()> {
         match event {
             AppEvent::Key(key) => {
                 if key.kind == KeyEventKind::Press {
@@ -267,13 +306,17 @@ impl App {
                             self.scroll_view_state.set_offset(Position::new(0, 0));
                             self.input.clear();
                             self.result = None;
-                            self.data.current_game = self.data.current_game.saturating_sub(1);
+                            if self.data.current_game > 0 {
+                                self.data.current_game -= 1;
+                                self.data.save().await?;
+                            }
                         }
                         (KeyCode::Char(']'), _) => {
                             self.scroll_view_state.set_offset(Position::new(0, 0));
                             self.input.clear();
                             self.result = None;
                             self.data.current_game += 1;
+                            self.data.save().await?;
                         }
                         (KeyCode::Char(c), Some(_)) if self.input.chars().count() < 17 => {
                             self.input.push(c);
@@ -288,6 +331,7 @@ impl App {
                                     x: ((index / 3) * 23).saturating_sub(1) as u16,
                                     y: 0,
                                 });
+                                self.data.save().await?;
                             }
                             self.result = Some((result, Instant::now()));
                             self.input.clear();

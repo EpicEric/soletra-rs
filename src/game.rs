@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
@@ -42,6 +44,17 @@ pub(crate) enum BadGuess {
     TooShort,
     WordNotInGame,
     AlreadyDiscovered,
+}
+
+impl Display for BadGuess {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            BadGuess::InvalidCharacters => "O palpite possui caracteres inválidos.",
+            BadGuess::TooShort => "O palpite deve ter 4 ou mais caracteres.",
+            BadGuess::WordNotInGame => "A palavra não está no jogo.",
+            BadGuess::AlreadyDiscovered => "Palavra já descoberta.",
+        })
+    }
 }
 
 pub(crate) enum GuessResult {
