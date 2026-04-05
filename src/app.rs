@@ -10,7 +10,8 @@ use rand::{
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Flex, Layout, Offset, Position, Rect},
-    widgets::Paragraph,
+    text::Line,
+    widgets::{Block, BorderType, Paragraph},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -165,7 +166,8 @@ impl App {
                     };
                     if let Some(game) = games.get(index) {
                         self.data.active_games.push(game.clone().into());
-                        self.data.current_game = self.data.active_games.len() - 1;
+                        let current_game = self.data.active_games.len() - 1;
+                        self.data.current_game = current_game;
                         self.data.save().await?;
                         let game = self
                             .data
@@ -175,6 +177,7 @@ impl App {
                         terminal.draw(|frame| {
                             App::render_game(
                                 frame,
+                                current_game,
                                 game,
                                 &self.input,
                                 &mut self.areas,
@@ -203,6 +206,7 @@ impl App {
                 }
             }
         } else {
+            let current_game = self.data.current_game;
             let game = self
                 .data
                 .active_games
@@ -211,6 +215,7 @@ impl App {
             terminal.draw(|frame| {
                 App::render_game(
                     frame,
+                    current_game,
                     game,
                     &self.input,
                     &mut self.areas,
@@ -223,13 +228,20 @@ impl App {
 
     fn render_game(
         frame: &mut Frame,
+        current_game: usize,
         game: &mut ActiveGame,
         input: &str,
         areas: &mut AppAreas,
         scroll_view_state: &mut ScrollViewState,
     ) {
+        let soletra_frame = Block::bordered()
+            .border_type(BorderType::Thick)
+            .title_top(Line::from(" soletra-rs ").centered())
+            .title_bottom(Line::from(format!(" Jogo #{} ", current_game + 1)).right_aligned());
+        frame.render_widget(&soletra_frame, frame.area());
+        let inner_area = soletra_frame.inner(frame.area());
         let [left_area, right_area] =
-            Layout::horizontal([Constraint::Length(21), Constraint::Fill(1)]).areas(frame.area());
+            Layout::horizontal([Constraint::Length(21), Constraint::Fill(1)]).areas(inner_area);
         let [honeycomb_area, input_area, actions_area] = Layout::vertical([
             Constraint::Length(9),
             Constraint::Length(3),

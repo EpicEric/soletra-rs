@@ -236,11 +236,14 @@ impl<'a> Widget for &mut GuessesWidget<'a> {
                     .not_dim()
                     .render(cell, scroll_view.buf_mut());
             } else {
-                Paragraph::new("???")
-                    .block(Block::bordered())
-                    .dim()
-                    .centered()
-                    .render(cell, scroll_view.buf_mut());
+                Paragraph::new(format!(
+                    "{} letras",
+                    guess.normalized.as_ref().chars().count()
+                ))
+                .block(Block::bordered())
+                .dim()
+                .centered()
+                .render(cell, scroll_view.buf_mut());
             }
         }
 
