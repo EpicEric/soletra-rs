@@ -7,41 +7,32 @@ use ratatui::{
 };
 use tui_scrollview::{ScrollView, ScrollViewState};
 
-use crate::game::ActiveGameWord;
+use crate::{app::AppAreas, game::ActiveGameWord};
 
 pub(crate) struct HoneycombWidget {
     pub(crate) main_letter: char,
     pub(crate) secondary_letters: [char; 6],
-
-    pub(crate) area_button_main: Rect,
-    pub(crate) area_button_one: Rect,
-    pub(crate) area_button_two: Rect,
-    pub(crate) area_button_three: Rect,
-    pub(crate) area_button_four: Rect,
-    pub(crate) area_button_five: Rect,
-    pub(crate) area_button_six: Rect,
 }
 
 pub(crate) struct InputWidget<'a> {
     pub(crate) input: &'a str,
+}
 
+pub(crate) struct InputWidgetState {
     pub(crate) cursor_position: Position,
 }
 
-pub(crate) struct ActionsWidget {
-    pub(crate) area_button_submit: Rect,
-    pub(crate) area_button_shuffle: Rect,
-    pub(crate) area_button_reset_shuffle: Rect,
-    pub(crate) area_button_clear: Rect,
-}
+pub(crate) struct ActionsWidget;
 
 pub(crate) struct GuessesWidget<'a> {
     pub(crate) guesses: &'a [ActiveGameWord],
     pub(crate) scroll_view_state: &'a mut ScrollViewState,
 }
 
-impl Widget for &mut HoneycombWidget {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+impl StatefulWidget for HoneycombWidget {
+    type State = AppAreas;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut AppAreas) {
         let area = area.centered_horizontally(Constraint::Length(15));
 
         let [top, middle, bottom] = Layout::vertical([
@@ -71,13 +62,13 @@ impl Widget for &mut HoneycombWidget {
         .horizontal_margin(2)
         .areas(bottom);
 
-        self.area_button_main = rect_main;
-        self.area_button_one = rect_one;
-        self.area_button_two = rect_two;
-        self.area_button_three = rect_three;
-        self.area_button_four = rect_four;
-        self.area_button_five = rect_five;
-        self.area_button_six = rect_six;
+        state.button_main = rect_main;
+        state.button_one = rect_one;
+        state.button_two = rect_two;
+        state.button_three = rect_three;
+        state.button_four = rect_four;
+        state.button_five = rect_five;
+        state.button_six = rect_six;
 
         let block_main = Block::bordered().black().on_cyan();
         let inner_main = block_main.inner(rect_main);
@@ -158,8 +149,10 @@ impl Widget for &mut HoneycombWidget {
     }
 }
 
-impl<'a> Widget for &mut InputWidget<'a> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+impl<'a> StatefulWidget for InputWidget<'a> {
+    type State = InputWidgetState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut InputWidgetState) {
         let block_input = Block::bordered().border_type(BorderType::Rounded);
         let inner_input = block_input.inner(area);
         block_input.render(area, buf);
@@ -168,15 +161,17 @@ impl<'a> Widget for &mut InputWidget<'a> {
             .to_span()
             .into_left_aligned_line()
             .render(inner_input, buf);
-        self.cursor_position = Position {
+        state.cursor_position = Position {
             x: inner_input.x + (self.input.chars().count() as u16),
             y: inner_input.y,
         };
     }
 }
 
-impl Widget for &mut ActionsWidget {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+impl StatefulWidget for ActionsWidget {
+    type State = AppAreas;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut AppAreas) {
         let [rect_clear, rect_shuffle, rect_reset_shuffle, rect_submit] = Layout::horizontal([
             Constraint::Length(5),
             Constraint::Length(5),
@@ -186,10 +181,10 @@ impl Widget for &mut ActionsWidget {
         .flex(Flex::Center)
         .areas(area);
 
-        self.area_button_clear = rect_clear;
-        self.area_button_shuffle = rect_shuffle;
-        self.area_button_reset_shuffle = rect_reset_shuffle;
-        self.area_button_submit = rect_submit;
+        state.button_clear = rect_clear;
+        state.button_shuffle = rect_shuffle;
+        state.button_reset_shuffle = rect_reset_shuffle;
+        state.button_submit = rect_submit;
 
         let block_clear = Block::bordered().dim();
         let inner_clear = block_clear.inner(rect_clear);
@@ -216,7 +211,7 @@ impl Widget for &mut ActionsWidget {
     }
 }
 
-impl<'a> Widget for &mut GuessesWidget<'a> {
+impl<'a> Widget for GuessesWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let rows = 3;
         let cols = self.guesses.len().div_ceil(rows);

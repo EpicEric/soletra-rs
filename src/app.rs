@@ -23,7 +23,7 @@ use tui_scrollview::ScrollViewState;
 
 use crate::{
     game::{ActiveGame, Game, GuessResult},
-    widgets::{ActionsWidget, GuessesWidget, HoneycombWidget, InputWidget},
+    widgets::{ActionsWidget, GuessesWidget, HoneycombWidget, InputWidget, InputWidgetState},
 };
 
 const GAMES: &str = include_str!("games.json");
@@ -56,17 +56,17 @@ pub(crate) struct App {
 
 #[derive(Default)]
 pub(crate) struct AppAreas {
-    button_main: Rect,
-    button_one: Rect,
-    button_two: Rect,
-    button_three: Rect,
-    button_four: Rect,
-    button_five: Rect,
-    button_six: Rect,
-    button_shuffle: Rect,
-    button_reset_shuffle: Rect,
-    button_clear: Rect,
-    button_submit: Rect,
+    pub(crate) button_main: Rect,
+    pub(crate) button_one: Rect,
+    pub(crate) button_two: Rect,
+    pub(crate) button_three: Rect,
+    pub(crate) button_four: Rect,
+    pub(crate) button_five: Rect,
+    pub(crate) button_six: Rect,
+    pub(crate) button_shuffle: Rect,
+    pub(crate) button_reset_shuffle: Rect,
+    pub(crate) button_clear: Rect,
+    pub(crate) button_submit: Rect,
 }
 
 #[derive(Debug, Clone)]
@@ -251,50 +251,26 @@ impl App {
         .spacing(1)
         .areas(left_area);
 
-        let mut honeycomb = HoneycombWidget {
+        let honeycomb = HoneycombWidget {
             main_letter: game.main_letter,
             secondary_letters: game.secondary_letters,
-            area_button_main: areas.button_main,
-            area_button_one: areas.button_one,
-            area_button_two: areas.button_two,
-            area_button_three: areas.button_three,
-            area_button_four: areas.button_four,
-            area_button_five: areas.button_five,
-            area_button_six: areas.button_six,
         };
-        frame.render_widget(&mut honeycomb, honeycomb_area);
-        areas.button_main = honeycomb.area_button_main;
-        areas.button_one = honeycomb.area_button_one;
-        areas.button_two = honeycomb.area_button_two;
-        areas.button_three = honeycomb.area_button_three;
-        areas.button_four = honeycomb.area_button_four;
-        areas.button_five = honeycomb.area_button_five;
-        areas.button_six = honeycomb.area_button_six;
+        frame.render_stateful_widget(honeycomb, honeycomb_area, areas);
 
-        let mut input = InputWidget {
-            input,
+        let input = InputWidget { input };
+        let mut state = InputWidgetState {
             cursor_position: Position::default(),
         };
-        frame.render_widget(&mut input, input_area);
-        frame.set_cursor_position(input.cursor_position);
+        frame.render_stateful_widget(input, input_area, &mut state);
+        frame.set_cursor_position(state.cursor_position);
 
-        let mut actions = ActionsWidget {
-            area_button_submit: areas.button_submit,
-            area_button_shuffle: areas.button_shuffle,
-            area_button_reset_shuffle: areas.button_reset_shuffle,
-            area_button_clear: areas.button_clear,
-        };
-        frame.render_widget(&mut actions, actions_area);
-        areas.button_submit = actions.area_button_submit;
-        areas.button_shuffle = actions.area_button_shuffle;
-        areas.button_reset_shuffle = actions.area_button_reset_shuffle;
-        areas.button_clear = actions.area_button_clear;
+        frame.render_stateful_widget(ActionsWidget {}, actions_area, areas);
 
-        let mut guesses = GuessesWidget {
+        let guesses = GuessesWidget {
             guesses: &game.words,
             scroll_view_state,
         };
-        frame.render_widget(&mut guesses, right_area);
+        frame.render_widget(guesses, right_area);
     }
 
     fn render_loading(frame: &mut Frame) {
