@@ -14,7 +14,7 @@ impl FromStr for NormalizedString {
             .chars()
             .map(|char| normalize_character(char).ok_or(()))
             .collect();
-        inner.map(|string| NormalizedString(string))
+        inner.map(NormalizedString)
     }
 }
 

@@ -1,13 +1,16 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Margin, Position, Rect, Size},
-    style::Stylize,
-    text::ToSpan,
-    widgets::{Block, BorderType, Paragraph, StatefulWidget, Widget},
+    style::{Style, Stylize},
+    text::{Line, ToSpan},
+    widgets::{Block, BorderType, Paragraph, StatefulWidget, Widget, Wrap},
 };
 use tui_scrollview::{ScrollView, ScrollViewState};
 
-use crate::{app::AppAreas, game::ActiveGameWord};
+use crate::{
+    app::AppAreas,
+    game::{ActiveGameWord, GuessResult},
+};
 
 pub(crate) struct HoneycombWidget {
     pub(crate) main_letter: char,
@@ -27,6 +30,15 @@ pub(crate) struct ActionsWidget;
 pub(crate) struct GuessesWidget<'a> {
     pub(crate) guesses: &'a [ActiveGameWord],
     pub(crate) scroll_view_state: &'a mut ScrollViewState,
+}
+
+pub(crate) struct GuessResultWidget<'a> {
+    pub(crate) result: &'a GuessResult,
+}
+
+pub(crate) struct GameOverWidget {
+    pub(crate) points: u16,
+    pub(crate) words: usize,
 }
 
 impl StatefulWidget for HoneycombWidget {
@@ -172,7 +184,12 @@ impl StatefulWidget for ActionsWidget {
     type State = AppAreas;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut AppAreas) {
-        let [rect_clear, rect_shuffle, rect_reset_shuffle, rect_submit] = Layout::horizontal([
+        let [
+            rect_backspace,
+            rect_shuffle,
+            rect_reset_shuffle,
+            rect_submit,
+        ] = Layout::horizontal([
             Constraint::Length(5),
             Constraint::Length(5),
             Constraint::Length(5),
@@ -181,15 +198,15 @@ impl StatefulWidget for ActionsWidget {
         .flex(Flex::Center)
         .areas(area);
 
-        state.button_clear = rect_clear;
+        state.button_backspace = rect_backspace;
         state.button_shuffle = rect_shuffle;
         state.button_reset_shuffle = rect_reset_shuffle;
         state.button_submit = rect_submit;
 
-        let block_clear = Block::bordered().dim();
-        let inner_clear = block_clear.inner(rect_clear);
-        block_clear.render(rect_clear, buf);
-        "".bold().into_centered_line().render(inner_clear, buf);
+        let block_backspace = Block::bordered().dim();
+        let inner_backspace = block_backspace.inner(rect_backspace);
+        block_backspace.render(rect_backspace, buf);
+        "󰁮".bold().into_centered_line().render(inner_backspace, buf);
 
         let block_shuffle = Block::bordered().dim();
         let inner_shuffle = block_shuffle.inner(rect_shuffle);
@@ -213,7 +230,7 @@ impl StatefulWidget for ActionsWidget {
 
 impl<'a> Widget for GuessesWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let rows = 3;
+        let rows = 1usize.max(((area.height.saturating_sub(2)) / 3) as usize);
         let cols = self.guesses.len().div_ceil(rows);
         let col_constraints = (0..cols).map(|_| Constraint::Length(22));
         let row_constraints = (0..rows).map(|_| Constraint::Length(3));
@@ -250,5 +267,61 @@ impl<'a> Widget for GuessesWidget<'a> {
             buf,
             self.scroll_view_state,
         );
+    }
+}
+
+impl<'a> Widget for GuessResultWidget<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let paragraph = match self.result {
+            GuessResult::Success {
+                points, is_pangram, ..
+            } => {
+                let text = if *is_pangram {
+                    format!("Você descobriu um pangrama! +{points}")
+                } else {
+                    format!("Boa! +{points}")
+                };
+                Paragraph::new(text.green())
+                    .wrap(Wrap { trim: true })
+                    .block(Block::bordered().border_style(Style::new().green()))
+                    .centered()
+            }
+            GuessResult::Failure(bad_guess) => Paragraph::new(bad_guess.to_string().red())
+                .wrap(Wrap { trim: true })
+                .block(Block::bordered().border_style(Style::new().red()))
+                .centered(),
+        };
+        let [_, inner] = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Length(paragraph.line_count(area.width - 2) as u16),
+        ])
+        .areas(area);
+        paragraph.render(inner, buf);
+    }
+}
+
+impl Widget for GameOverWidget {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        Paragraph::new(vec![
+            Line::from("Vitória!".green()),
+            Line::from(format!(
+                "Você descobriu {} palavras e obteve {} pontos!",
+                self.words, self.points
+            )),
+            Line::from("Aperte ] para ir ao próximo jogo."),
+        ])
+        .block(
+            Block::bordered()
+                .border_type(BorderType::QuadrantOutside)
+                .border_style(Style::new().green()),
+        )
+        .centered()
+        .render(area, buf);
     }
 }

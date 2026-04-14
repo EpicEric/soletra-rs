@@ -49,10 +49,10 @@ pub(crate) enum BadGuess {
 impl Display for BadGuess {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            BadGuess::InvalidCharacters => "O palpite possui caracteres inválidos.",
-            BadGuess::TooShort => "O palpite deve ter 4 ou mais caracteres.",
+            BadGuess::InvalidCharacters => "O palpite possui letras inválidas.",
+            BadGuess::TooShort => "O palpite deve ter 4 ou mais letras.",
             BadGuess::WordNotInGame => "A palavra não está no jogo.",
-            BadGuess::AlreadyDiscovered => "Palavra já descoberta.",
+            BadGuess::AlreadyDiscovered => "Palavra já descoberta!",
         })
     }
 }
@@ -147,7 +147,7 @@ impl ActiveGame {
                 index,
                 points: word.points,
                 is_pangram: word.is_pangram,
-                is_game_over: self.found_words == self.words.len(),
+                is_game_over: self.found_words >= self.words.len(),
             }
         }
     }

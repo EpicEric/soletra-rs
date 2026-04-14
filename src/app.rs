@@ -9,9 +9,10 @@ use rand::{
 };
 use ratatui::{
     DefaultTerminal, Frame,
-    layout::{Constraint, Flex, Layout, Offset, Position, Rect},
+    layout::{Constraint, Layout, Offset, Position, Rect},
+    style::Style,
     text::Line,
-    widgets::{Block, BorderType, Paragraph},
+    widgets::{Block, BorderType, Gauge, Paragraph, Widget},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -23,11 +24,14 @@ use tui_scrollview::ScrollViewState;
 
 use crate::{
     game::{ActiveGame, Game, GuessResult},
-    widgets::{ActionsWidget, GuessesWidget, HoneycombWidget, InputWidget, InputWidgetState},
+    widgets::{
+        ActionsWidget, GameOverWidget, GuessResultWidget, GuessesWidget, HoneycombWidget,
+        InputWidget, InputWidgetState,
+    },
 };
 
 const GAMES: &str = include_str!("games.json");
-const FPS: u64 = 60;
+const FPS: u64 = 30;
 const FRAME_DURATION: Duration = Duration::from_millis(1_000 / FPS);
 const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
     name: "SoletraRs",
@@ -47,11 +51,14 @@ pub(crate) struct App {
     data: AppData,
     games: Option<Vec<Game>>,
     result: Option<(GuessResult, Instant)>,
+    game_over: Option<Instant>,
     input: String,
     should_quit: bool,
     loading_games: bool,
     areas: AppAreas,
     scroll_view_state: ScrollViewState,
+    guess_result_state: tui_overlay::OverlayState,
+    game_over_state: tui_overlay::OverlayState,
 }
 
 #[derive(Default)]
@@ -65,7 +72,7 @@ pub(crate) struct AppAreas {
     pub(crate) button_six: Rect,
     pub(crate) button_shuffle: Rect,
     pub(crate) button_reset_shuffle: Rect,
-    pub(crate) button_clear: Rect,
+    pub(crate) button_backspace: Rect,
     pub(crate) button_submit: Rect,
 }
 
@@ -110,11 +117,18 @@ impl App {
             data: AppData::init().await.unwrap_or_default(),
             games: None,
             result: None,
+            game_over: None,
             input: String::new(),
             should_quit: false,
             loading_games: false,
             areas: Default::default(),
             scroll_view_state: Default::default(),
+            guess_result_state: tui_overlay::OverlayState::new()
+                .with_duration(Duration::from_millis(150))
+                .with_easing(tui_overlay::Easing::EaseInOut),
+            game_over_state: tui_overlay::OverlayState::new()
+                .with_duration(Duration::from_millis(150))
+                .with_easing(tui_overlay::Easing::EaseInOut),
         }
     }
 
@@ -129,7 +143,7 @@ impl App {
         });
 
         let mut frame_interval = interval(FRAME_DURATION);
-        frame_interval.tick().await;
+        let mut prev = frame_interval.tick().await;
 
         loop {
             // Handle events
@@ -143,7 +157,17 @@ impl App {
 
             // Render terminal
             self.render(terminal, &tx).await?;
-            frame_interval.tick().await;
+            let curr = frame_interval.tick().await;
+            let elapsed = curr.duration_since(prev);
+            self.guess_result_state.tick(elapsed);
+            self.game_over_state.tick(elapsed);
+            if let Some(game_over) = self.game_over
+                && curr.into_std() >= game_over
+            {
+                self.game_over_state.open();
+                self.game_over = None;
+            }
+            prev = curr;
         }
     }
 
@@ -169,25 +193,11 @@ impl App {
                         let current_game = self.data.active_games.len() - 1;
                         self.data.current_game = current_game;
                         self.data.save().await?;
-                        let game = self
-                            .data
-                            .active_games
-                            .get_mut(self.data.current_game)
-                            .expect("length checked");
-                        terminal.draw(|frame| {
-                            App::render_game(
-                                frame,
-                                current_game,
-                                game,
-                                &self.input,
-                                &mut self.areas,
-                                &mut self.scroll_view_state,
-                            )
-                        })?;
+                        terminal.draw(|frame| self.render_game(frame))?;
                     }
                 }
                 None => {
-                    terminal.draw(|frame| App::render_loading(frame))?;
+                    terminal.draw(App::render_loading)?;
 
                     // Only spawn the loading task once
                     if !self.loading_games {
@@ -206,71 +216,104 @@ impl App {
                 }
             }
         } else {
-            let current_game = self.data.current_game;
-            let game = self
-                .data
-                .active_games
-                .get_mut(self.data.current_game)
-                .expect("length checked");
-            terminal.draw(|frame| {
-                App::render_game(
-                    frame,
-                    current_game,
-                    game,
-                    &self.input,
-                    &mut self.areas,
-                    &mut self.scroll_view_state,
-                )
-            })?;
+            terminal.draw(|frame| self.render_game(frame))?;
         }
         Ok(())
     }
 
-    fn render_game(
-        frame: &mut Frame,
-        current_game: usize,
-        game: &mut ActiveGame,
-        input: &str,
-        areas: &mut AppAreas,
-        scroll_view_state: &mut ScrollViewState,
-    ) {
+    fn render_game(&mut self, frame: &mut Frame) {
+        let game = self
+            .data
+            .active_games
+            .get_mut(self.data.current_game)
+            .expect("length checked");
+        let guess_result_state = &mut self.guess_result_state;
+        let game_over_state = &mut self.game_over_state;
+
         let soletra_frame = Block::bordered()
             .border_type(BorderType::Thick)
             .title_top(Line::from(" soletra-rs ").centered())
-            .title_bottom(Line::from(format!(" Jogo #{} ", current_game + 1)).right_aligned());
+            .title_bottom(
+                Line::from(format!(" Jogo #{} ", self.data.current_game + 1)).right_aligned(),
+            );
         frame.render_widget(&soletra_frame, frame.area());
         let inner_area = soletra_frame.inner(frame.area());
         let [left_area, right_area] =
             Layout::horizontal([Constraint::Length(21), Constraint::Fill(1)]).areas(inner_area);
-        let [honeycomb_area, input_area, actions_area] = Layout::vertical([
+        let [
+            alert_area,
+            honeycomb_area,
+            input_area,
+            actions_area,
+            points_area,
+            _,
+        ] = Layout::vertical([
+            Constraint::Fill(1),
             Constraint::Length(9),
             Constraint::Length(3),
             Constraint::Length(3),
+            Constraint::Length(1),
+            Constraint::Fill(1),
         ])
-        .flex(Flex::Center)
         .spacing(1)
         .areas(left_area);
+
+        let alert = tui_overlay::Overlay::new()
+            .anchor(tui_overlay::Anchor::Bottom)
+            .slide(tui_overlay::Slide::Bottom)
+            .width(Constraint::Fill(1));
+        frame.render_stateful_widget(alert, alert_area, guess_result_state);
+        if let Some(inner) = guess_result_state.inner_area()
+            && let Some((result, instant)) = self.result.as_ref()
+        {
+            frame.render_widget(GuessResultWidget { result }, inner);
+            if instant.elapsed() >= Duration::from_secs(3) {
+                guess_result_state.close();
+            }
+        }
 
         let honeycomb = HoneycombWidget {
             main_letter: game.main_letter,
             secondary_letters: game.secondary_letters,
         };
-        frame.render_stateful_widget(honeycomb, honeycomb_area, areas);
+        frame.render_stateful_widget(honeycomb, honeycomb_area, &mut self.areas);
 
-        let input = InputWidget { input };
+        let input = InputWidget { input: &self.input };
         let mut state = InputWidgetState {
             cursor_position: Position::default(),
         };
         frame.render_stateful_widget(input, input_area, &mut state);
         frame.set_cursor_position(state.cursor_position);
 
-        frame.render_stateful_widget(ActionsWidget {}, actions_area, areas);
+        frame.render_stateful_widget(ActionsWidget {}, actions_area, &mut self.areas);
+
+        Gauge::default()
+            .gauge_style(Style::new().green().on_black())
+            .label(format!("{}/{}", game.points, game.total_points))
+            .ratio((game.points as f64) / (game.total_points as f64))
+            .render(points_area, frame.buffer_mut());
 
         let guesses = GuessesWidget {
             guesses: &game.words,
-            scroll_view_state,
+            scroll_view_state: &mut self.scroll_view_state,
         };
         frame.render_widget(guesses, right_area);
+
+        let game_over = tui_overlay::Overlay::new()
+            .anchor(tui_overlay::Anchor::Center)
+            .width(Constraint::Percentage(60))
+            .height(Constraint::Percentage(50))
+            .backdrop(tui_overlay::Backdrop::new(ratatui::style::Color::Black));
+        frame.render_stateful_widget(game_over, inner_area, game_over_state);
+        if let Some(inner) = game_over_state.inner_area() {
+            frame.render_widget(
+                GameOverWidget {
+                    points: game.points,
+                    words: game.words.len(),
+                },
+                inner,
+            );
+        }
     }
 
     fn render_loading(frame: &mut Frame) {
@@ -293,7 +336,10 @@ impl App {
                         (KeyCode::Char('['), _) => {
                             self.scroll_view_state.set_offset(Position::new(0, 0));
                             self.input.clear();
+                            self.guess_result_state.close();
+                            self.game_over_state.close();
                             self.result = None;
+                            self.game_over = None;
                             if self.data.current_game > 0 {
                                 self.data.current_game -= 1;
                                 self.data.save().await?;
@@ -302,7 +348,10 @@ impl App {
                         (KeyCode::Char(']'), _) => {
                             self.scroll_view_state.set_offset(Position::new(0, 0));
                             self.input.clear();
+                            self.guess_result_state.close();
+                            self.game_over_state.close();
                             self.result = None;
+                            self.game_over = None;
                             self.data.current_game += 1;
                             self.data.save().await?;
                         }
@@ -314,14 +363,24 @@ impl App {
                         }
                         (KeyCode::Enter, Some(game)) => {
                             let result = game.guess(&self.input);
-                            if let GuessResult::Success { index, .. } = &result {
+                            if let GuessResult::Success {
+                                index,
+                                is_game_over,
+                                ..
+                            } = &result
+                            {
                                 self.scroll_view_state.set_offset(Position {
                                     x: ((index / 3) * 23).saturating_sub(1) as u16,
                                     y: 0,
                                 });
                                 self.data.save().await?;
+                                if *is_game_over {
+                                    self.game_over =
+                                        Instant::now().checked_add(Duration::from_secs(1));
+                                }
                             }
                             self.result = Some((result, Instant::now()));
+                            self.guess_result_state.open();
                             self.input.clear();
                         }
                         (KeyCode::Right, _) => {
@@ -376,18 +435,30 @@ impl App {
                     if self.areas.button_reset_shuffle.contains(position) {
                         game.reset_shuffle();
                     }
-                    if self.areas.button_clear.contains(position) {
-                        self.input.clear();
+                    if self.areas.button_backspace.contains(position) {
+                        let mut chars = self.input.chars();
+                        chars.next_back();
+                        self.input = chars.collect();
                     }
                     if self.areas.button_submit.contains(position) {
                         let result = game.guess(&self.input);
-                        if let GuessResult::Success { index, .. } = &result {
+                        if let GuessResult::Success {
+                            index,
+                            is_game_over,
+                            ..
+                        } = &result
+                        {
                             self.scroll_view_state.set_offset(Position {
                                 x: ((index / 3) * 23).saturating_sub(1) as u16,
                                 y: 0,
                             });
+                            self.data.save().await?;
+                            if *is_game_over {
+                                self.game_over = Instant::now().checked_add(Duration::from_secs(1));
+                            }
                         }
                         self.result = Some((result, Instant::now()));
+                        self.guess_result_state.open();
                         self.input.clear();
                     }
                 }
