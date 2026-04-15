@@ -1,7 +1,9 @@
+use std::time::Duration;
+
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Margin, Position, Rect, Size},
-    style::{Style, Stylize},
+    style::{Color, Style, Stylize},
     text::{Line, ToSpan},
     widgets::{Block, BorderType, Paragraph, StatefulWidget, Widget, Wrap},
 };
@@ -28,8 +30,10 @@ pub(crate) struct InputWidgetState {
 pub(crate) struct ActionsWidget;
 
 pub(crate) struct GuessesWidget<'a> {
-    pub(crate) guesses: &'a [ActiveGameWord],
+    pub(crate) guesses: &'a mut [ActiveGameWord],
     pub(crate) scroll_view_state: &'a mut ScrollViewState,
+    pub(crate) effects: &'a mut tachyonfx::EffectManager<()>,
+    pub(crate) elapsed: Duration,
 }
 
 pub(crate) struct GuessResultWidget<'a> {
@@ -203,17 +207,17 @@ impl StatefulWidget for ActionsWidget {
         state.button_reset_shuffle = rect_reset_shuffle;
         state.button_submit = rect_submit;
 
-        let block_backspace = Block::bordered().dim();
+        let block_backspace = Block::bordered();
         let inner_backspace = block_backspace.inner(rect_backspace);
         block_backspace.render(rect_backspace, buf);
         "󰁮".bold().into_centered_line().render(inner_backspace, buf);
 
-        let block_shuffle = Block::bordered().dim();
+        let block_shuffle = Block::bordered();
         let inner_shuffle = block_shuffle.inner(rect_shuffle);
         block_shuffle.render(rect_shuffle, buf);
         "".bold().into_centered_line().render(inner_shuffle, buf);
 
-        let block_reset_shuffle = Block::bordered().dim();
+        let block_reset_shuffle = Block::bordered();
         let inner_reset_shuffle = block_reset_shuffle.inner(rect_reset_shuffle);
         block_reset_shuffle.render(rect_reset_shuffle, buf);
         ""
@@ -221,32 +225,53 @@ impl StatefulWidget for ActionsWidget {
             .into_centered_line()
             .render(inner_reset_shuffle, buf);
 
-        let block_submit = Block::bordered().dim();
+        let block_submit = Block::bordered();
         let inner_submit = block_submit.inner(rect_submit);
         block_submit.render(rect_submit, buf);
         "".bold().into_centered_line().render(inner_submit, buf);
     }
 }
 
-impl<'a> Widget for GuessesWidget<'a> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+impl<'a> StatefulWidget for GuessesWidget<'a> {
+    type State = usize;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut usize) {
         let rows = 1usize.max(((area.height.saturating_sub(2)) / 3) as usize);
+        *state = rows;
         let cols = self.guesses.len().div_ceil(rows);
         let col_constraints = (0..cols).map(|_| Constraint::Length(22));
         let row_constraints = (0..rows).map(|_| Constraint::Length(3));
         let horizontal = Layout::horizontal(col_constraints).spacing(1);
         let vertical = Layout::vertical(row_constraints);
 
-        let mut scroll_view = ScrollView::new(Size::new(23 * (cols as u16) - 1, 3 * (rows as u16)));
-        let cols_layout = scroll_view.area().layout_vec(&horizontal);
+        let mut scroll_view = ScrollView::new(Size::new(
+            (23 * (cols as u16)).saturating_sub(1),
+            3 * (rows as u16),
+        ));
+        let scroll_view_area = scroll_view.area();
+        let scroll_view_buf = scroll_view.buf_mut();
+        let cols_layout = scroll_view_area.layout_vec(&horizontal);
         let cells = cols_layout.iter().flat_map(|col| col.layout_vec(&vertical));
 
-        for (cell, guess) in cells.zip(self.guesses.iter()) {
+        for (cell, guess) in cells.zip(self.guesses.iter_mut()) {
             if guess.discovered {
                 Paragraph::new(guess.original.as_str())
                     .block(Block::bordered())
                     .not_dim()
-                    .render(cell, scroll_view.buf_mut());
+                    .render(cell, scroll_view_buf);
+                if !guess.has_effect {
+                    self.effects.add_effect(
+                        tachyonfx::fx::slide_in(
+                            tachyonfx::Motion::LeftToRight,
+                            10,
+                            0,
+                            Color::Reset,
+                            (500, tachyonfx::Interpolation::Linear),
+                        )
+                        .with_area(cell),
+                    );
+                    guess.has_effect = true;
+                }
             } else {
                 Paragraph::new(format!(
                     "{} letras",
@@ -255,9 +280,12 @@ impl<'a> Widget for GuessesWidget<'a> {
                 .block(Block::bordered())
                 .dim()
                 .centered()
-                .render(cell, scroll_view.buf_mut());
+                .render(cell, scroll_view_buf);
             }
         }
+
+        self.effects
+            .process_effects(self.elapsed.into(), scroll_view_buf, scroll_view_area);
 
         scroll_view.render(
             area.inner(Margin {

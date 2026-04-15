@@ -10,7 +10,7 @@ use rand::{
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Layout, Offset, Position, Rect},
-    style::Style,
+    style::{Style, Stylize},
     text::Line,
     widgets::{Block, BorderType, Gauge, Paragraph, Widget},
 };
@@ -56,9 +56,12 @@ pub(crate) struct App {
     should_quit: bool,
     loading_games: bool,
     areas: AppAreas,
+    rows: usize,
     scroll_view_state: ScrollViewState,
     guess_result_state: tui_overlay::OverlayState,
     game_over_state: tui_overlay::OverlayState,
+    effects: tachyonfx::EffectManager<()>,
+    elapsed: Duration,
 }
 
 #[derive(Default)]
@@ -122,6 +125,7 @@ impl App {
             should_quit: false,
             loading_games: false,
             areas: Default::default(),
+            rows: 1,
             scroll_view_state: Default::default(),
             guess_result_state: tui_overlay::OverlayState::new()
                 .with_duration(Duration::from_millis(150))
@@ -129,6 +133,8 @@ impl App {
             game_over_state: tui_overlay::OverlayState::new()
                 .with_duration(Duration::from_millis(150))
                 .with_easing(tui_overlay::Easing::EaseInOut),
+            effects: tachyonfx::EffectManager::default(),
+            elapsed: Duration::ZERO,
         }
     }
 
@@ -158,9 +164,9 @@ impl App {
             // Render terminal
             self.render(terminal, &tx).await?;
             let curr = frame_interval.tick().await;
-            let elapsed = curr.duration_since(prev);
-            self.guess_result_state.tick(elapsed);
-            self.game_over_state.tick(elapsed);
+            self.elapsed = curr.duration_since(prev);
+            self.guess_result_state.tick(self.elapsed);
+            self.game_over_state.tick(self.elapsed);
             if let Some(game_over) = self.game_over
                 && curr.into_std() >= game_over
             {
@@ -229,13 +235,17 @@ impl App {
             .expect("length checked");
         let guess_result_state = &mut self.guess_result_state;
         let game_over_state = &mut self.game_over_state;
+        let is_game_over = game_over_state.is_open();
 
-        let soletra_frame = Block::bordered()
+        let mut soletra_frame = Block::bordered()
             .border_type(BorderType::Thick)
             .title_top(Line::from(" soletra-rs ").centered())
-            .title_bottom(
-                Line::from(format!(" Jogo #{} ", self.data.current_game + 1)).right_aligned(),
-            );
+            .title_bottom(Line::from(format!(" Jogo #{} ", self.data.current_game + 1)).centered())
+            .title_bottom(Line::from(vec![" Próximo  ] ".reversed()]).right_aligned());
+        if self.data.current_game > 0 {
+            soletra_frame = soletra_frame
+                .title_bottom(Line::from(vec![" [  Anterior ".reversed()]).left_aligned());
+        }
         frame.render_widget(&soletra_frame, frame.area());
         let inner_area = soletra_frame.inner(frame.area());
         let [left_area, right_area] =
@@ -243,19 +253,22 @@ impl App {
         let [
             alert_area,
             honeycomb_area,
+            _,
             input_area,
             actions_area,
+            _,
             points_area,
             _,
         ] = Layout::vertical([
-            Constraint::Fill(1),
+            Constraint::Min(4),
             Constraint::Length(9),
+            Constraint::Max(1),
             Constraint::Length(3),
             Constraint::Length(3),
+            Constraint::Max(1),
             Constraint::Length(1),
             Constraint::Fill(1),
         ])
-        .spacing(1)
         .areas(left_area);
 
         let alert = tui_overlay::Overlay::new()
@@ -283,7 +296,9 @@ impl App {
             cursor_position: Position::default(),
         };
         frame.render_stateful_widget(input, input_area, &mut state);
-        frame.set_cursor_position(state.cursor_position);
+        if !is_game_over {
+            frame.set_cursor_position(state.cursor_position);
+        }
 
         frame.render_stateful_widget(ActionsWidget {}, actions_area, &mut self.areas);
 
@@ -294,10 +309,12 @@ impl App {
             .render(points_area, frame.buffer_mut());
 
         let guesses = GuessesWidget {
-            guesses: &game.words,
+            guesses: &mut game.words,
             scroll_view_state: &mut self.scroll_view_state,
+            effects: &mut self.effects,
+            elapsed: self.elapsed,
         };
-        frame.render_widget(guesses, right_area);
+        frame.render_stateful_widget(guesses, right_area, &mut self.rows);
 
         let game_over = tui_overlay::Overlay::new()
             .anchor(tui_overlay::Anchor::Center)
@@ -341,7 +358,18 @@ impl App {
                             self.result = None;
                             self.game_over = None;
                             if self.data.current_game > 0 {
+                                for word in self
+                                    .data
+                                    .active_games
+                                    .get_mut(self.data.current_game)
+                                    .expect("length checked")
+                                    .words
+                                    .iter_mut()
+                                {
+                                    word.has_effect = false;
+                                }
                                 self.data.current_game -= 1;
+                                self.effects = tachyonfx::EffectManager::default();
                                 self.data.save().await?;
                             }
                         }
@@ -352,7 +380,18 @@ impl App {
                             self.game_over_state.close();
                             self.result = None;
                             self.game_over = None;
+                            for word in self
+                                .data
+                                .active_games
+                                .get_mut(self.data.current_game)
+                                .expect("length checked")
+                                .words
+                                .iter_mut()
+                            {
+                                word.has_effect = false;
+                            }
                             self.data.current_game += 1;
+                            self.effects = tachyonfx::EffectManager::default();
                             self.data.save().await?;
                         }
                         (KeyCode::Char(c), Some(_)) if self.input.chars().count() < 17 => {
@@ -370,7 +409,7 @@ impl App {
                             } = &result
                             {
                                 self.scroll_view_state.set_offset(Position {
-                                    x: ((index / 3) * 23).saturating_sub(1) as u16,
+                                    x: ((index / self.rows) * 23).saturating_sub(1) as u16,
                                     y: 0,
                                 });
                                 self.data.save().await?;
@@ -436,9 +475,7 @@ impl App {
                         game.reset_shuffle();
                     }
                     if self.areas.button_backspace.contains(position) {
-                        let mut chars = self.input.chars();
-                        chars.next_back();
-                        self.input = chars.collect();
+                        self.input.pop();
                     }
                     if self.areas.button_submit.contains(position) {
                         let result = game.guess(&self.input);
@@ -449,7 +486,7 @@ impl App {
                         } = &result
                         {
                             self.scroll_view_state.set_offset(Position {
-                                x: ((index / 3) * 23).saturating_sub(1) as u16,
+                                x: ((index / self.rows) * 23).saturating_sub(1) as u16,
                                 y: 0,
                             });
                             self.data.save().await?;

@@ -26,6 +26,8 @@ pub(crate) struct ActiveGameWord {
     pub(crate) is_pangram: bool,
     pub(crate) discovered: bool,
     pub(crate) points: u16,
+    #[serde(skip)]
+    pub(crate) has_effect: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -82,6 +84,7 @@ impl From<Word> for ActiveGameWord {
             is_pangram: value.is_pangram,
             discovered: false,
             points,
+            has_effect: false,
         }
     }
 }
