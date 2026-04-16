@@ -1,4 +1,5 @@
 {
+  language ? "pt",
   system ? builtins.currentSystem,
   sources ? import ./npins,
   pkgs ? import sources.nixpkgs {
@@ -14,7 +15,14 @@ let
 
   src =
     let
-      soletra-rs-games = import ./generate-games.nix { inherit system sources pkgs; };
+      soletra-rs-games = import ./generate-games.nix {
+        inherit
+          language
+          system
+          sources
+          pkgs
+          ;
+      };
     in
     pkgs.stdenvNoCC.mkDerivation {
       name = "soletra-rs-source";
@@ -22,6 +30,7 @@ let
         root = ./.;
         fileset = lib.fileset.unions [
           (craneLib.fileset.commonCargoSources ./.)
+          ./locales
         ];
       };
       installPhase = ''
@@ -46,6 +55,7 @@ craneLib.buildPackage (
   commonArgs
   // {
     inherit cargoArtifacts;
+    SOLETRA_RS_LANGUAGE = language;
     doCheck = false;
     meta.mainProgram = "soletra-rs";
   }

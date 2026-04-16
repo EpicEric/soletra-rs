@@ -14,6 +14,7 @@ use ratatui::{
     text::Line,
     widgets::{Block, BorderType, Gauge, Paragraph, Widget},
 };
+use rust_i18n::t;
 use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
@@ -37,7 +38,8 @@ const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
     name: "SoletraRs",
     author: "EpicEric",
 };
-const SAVE_DATA: &str = "save.json";
+const SAVE_DATA: &str = concat!(env!("SOLETRA_RS_LANGUAGE"), ".json");
+const MAX_CHARACTERS: usize = 19;
 
 #[derive(Default, Serialize, Deserialize)]
 pub(crate) struct AppData {
@@ -240,16 +242,18 @@ impl App {
         let mut soletra_frame = Block::bordered()
             .border_type(BorderType::Thick)
             .title_top(Line::from(" soletra-rs ").centered())
-            .title_bottom(Line::from(format!(" Jogo #{} ", self.data.current_game + 1)).centered())
-            .title_bottom(Line::from(vec![" Próximo  ] ".reversed()]).right_aligned());
+            .title_bottom(
+                Line::from(t!("game_number", game => self.data.current_game + 1)).centered(),
+            )
+            .title_bottom(Line::from(t!("next_game").reversed()).right_aligned());
         if self.data.current_game > 0 {
             soletra_frame = soletra_frame
-                .title_bottom(Line::from(vec![" [  Anterior ".reversed()]).left_aligned());
+                .title_bottom(Line::from(t!("previous_game").reversed()).left_aligned());
         }
         frame.render_widget(&soletra_frame, frame.area());
         let inner_area = soletra_frame.inner(frame.area());
         let [left_area, right_area] =
-            Layout::horizontal([Constraint::Length(21), Constraint::Fill(1)]).areas(inner_area);
+            Layout::horizontal([Constraint::Length(22), Constraint::Fill(1)]).areas(inner_area);
         let [
             alert_area,
             honeycomb_area,
@@ -260,7 +264,7 @@ impl App {
             points_area,
             _,
         ] = Layout::vertical([
-            Constraint::Min(4),
+            Constraint::Min(5),
             Constraint::Length(9),
             Constraint::Max(1),
             Constraint::Length(3),
@@ -334,7 +338,7 @@ impl App {
     }
 
     fn render_loading(frame: &mut Frame) {
-        frame.render_widget(Paragraph::new("Carregando...").centered(), frame.area());
+        frame.render_widget(Paragraph::new(t!("loading")).centered(), frame.area());
     }
 
     async fn handle_event(&mut self, event: AppEvent) -> color_eyre::Result<()> {
@@ -394,7 +398,9 @@ impl App {
                             self.effects = tachyonfx::EffectManager::default();
                             self.data.save().await?;
                         }
-                        (KeyCode::Char(c), Some(_)) if self.input.chars().count() < 17 => {
+                        (KeyCode::Char(c), Some(_))
+                            if self.input.chars().count() < MAX_CHARACTERS =>
+                        {
                             self.input.push(c);
                         }
                         (KeyCode::Backspace, Some(_)) => {
@@ -445,39 +451,28 @@ impl App {
                     && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
                 {
                     let position = Position::new(mouse.column, mouse.row);
-                    if self.input.chars().count() < 17 {
-                        if self.areas.button_main.contains(position) {
-                            self.input.push(game.main_letter);
-                        }
-                        if self.areas.button_one.contains(position) {
-                            self.input.push(game.secondary_letters[0]);
-                        }
-                        if self.areas.button_two.contains(position) {
-                            self.input.push(game.secondary_letters[1]);
-                        }
-                        if self.areas.button_three.contains(position) {
-                            self.input.push(game.secondary_letters[2]);
-                        }
-                        if self.areas.button_four.contains(position) {
-                            self.input.push(game.secondary_letters[3]);
-                        }
-                        if self.areas.button_five.contains(position) {
-                            self.input.push(game.secondary_letters[4]);
-                        }
-                        if self.areas.button_six.contains(position) {
-                            self.input.push(game.secondary_letters[5]);
-                        }
-                    }
-                    if self.areas.button_shuffle.contains(position) {
+                    let not_max_characters = self.input.chars().count() < MAX_CHARACTERS;
+                    if not_max_characters && self.areas.button_main.contains(position) {
+                        self.input.push(game.main_letter);
+                    } else if not_max_characters && self.areas.button_one.contains(position) {
+                        self.input.push(game.secondary_letters[0]);
+                    } else if not_max_characters && self.areas.button_two.contains(position) {
+                        self.input.push(game.secondary_letters[1]);
+                    } else if not_max_characters && self.areas.button_three.contains(position) {
+                        self.input.push(game.secondary_letters[2]);
+                    } else if not_max_characters && self.areas.button_four.contains(position) {
+                        self.input.push(game.secondary_letters[3]);
+                    } else if not_max_characters && self.areas.button_five.contains(position) {
+                        self.input.push(game.secondary_letters[4]);
+                    } else if not_max_characters && self.areas.button_six.contains(position) {
+                        self.input.push(game.secondary_letters[5]);
+                    } else if self.areas.button_shuffle.contains(position) {
                         game.shuffle();
-                    }
-                    if self.areas.button_reset_shuffle.contains(position) {
+                    } else if self.areas.button_reset_shuffle.contains(position) {
                         game.reset_shuffle();
-                    }
-                    if self.areas.button_backspace.contains(position) {
+                    } else if self.areas.button_backspace.contains(position) {
                         self.input.pop();
-                    }
-                    if self.areas.button_submit.contains(position) {
+                    } else if self.areas.button_submit.contains(position) {
                         let result = game.guess(&self.input);
                         if let GuessResult::Success {
                             index,

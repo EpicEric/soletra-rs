@@ -16,4 +16,6 @@ craneLib.devShell {
       ps.tqdm
     ]))
   ];
+
+  SOLETRA_RS_LANGUAGE = "pt";
 }

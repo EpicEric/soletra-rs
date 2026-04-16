@@ -1,0 +1,43 @@
+_version: 2
+loading:
+  pt: "Carregando..."
+  en: "Loading..."
+game_number:
+  pt: " Jogo #%{game} "
+  en: " Game #%{game} "
+next_game:
+  pt: " Próximo  ] "
+  en: " Next  ] "
+previous_game:
+  pt: " [  Anterior "
+  en: " [  Previous "
+hidden_guess:
+  pt: "%{letters} letras"
+  en: "%{letters} letters"
+good_guess:
+  pt: "Boa! +%{points}"
+  en: "Nice! +%{points}"
+good_guess_pangram:
+  pt: "Você descobriu um pangrama! +%{points}"
+  en: "You found a pangram! +%{points}"
+bad_guess.invalid_characters:
+  pt: "O palpite possui letras inválidas."
+  en: "Guess has invalid letters."
+bad_guess.too_short:
+  pt: "O palpite deve ter 4 ou mais letras."
+  en: "Guess must have 4 or more letters."
+bad_guess.word_not_in_game:
+  pt: "A palavra não está no jogo."
+  en: "Word not in the game."
+bad_guess.already_discovered:
+  pt: "Palavra já descoberta!"
+  en: "Word already discovered!"
+victory:
+  pt: "Vitória!"
+  en: "Victory!"
+victory.line_1:
+  pt: "Você descobriu %{words} palavras e obteve %{points} pontos!"
+  en: "You found %{words} words and got %{points} points!"
+victory.line_2:
+  pt: "Aperte ] para ir ao próximo jogo."
+  en: "Press ] to go to the next game."

@@ -1,4 +1,6 @@
 {
+  description = "TUI version of the game Soletra/Spelling Bee";
+
   inputs = { };
 
   outputs =
@@ -28,7 +30,16 @@
         ) { } systems);
     in
     eachSystem (system: {
-      packages.${system}.default = import ./. { inherit system; };
+      packages.${system} = {
+        pt = import ./. {
+          language = "pt";
+          inherit system;
+        };
+        en = import ./. {
+          language = "en";
+          inherit system;
+        };
+      };
 
       devShells.${system}.default = import ./shell.nix { inherit system; };
     });

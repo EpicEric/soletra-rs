@@ -7,6 +7,7 @@ use ratatui::{
     text::{Line, ToSpan},
     widgets::{Block, BorderType, Paragraph, StatefulWidget, Widget, Wrap},
 };
+use rust_i18n::t;
 use tui_scrollview::{ScrollView, ScrollViewState};
 
 use crate::{
@@ -273,9 +274,9 @@ impl<'a> StatefulWidget for GuessesWidget<'a> {
                     guess.has_effect = true;
                 }
             } else {
-                Paragraph::new(format!(
-                    "{} letras",
-                    guess.normalized.as_ref().chars().count()
+                Paragraph::new(t!(
+                    "hidden_guess",
+                    letters => guess.normalized.as_ref().chars().count()
                 ))
                 .block(Block::bordered())
                 .dim()
@@ -308,9 +309,9 @@ impl<'a> Widget for GuessResultWidget<'a> {
                 points, is_pangram, ..
             } => {
                 let text = if *is_pangram {
-                    format!("Você descobriu um pangrama! +{points}")
+                    t!("good_guess_pangram", points => points)
                 } else {
-                    format!("Boa! +{points}")
+                    t!("good_guess", points => points)
                 };
                 Paragraph::new(text.green())
                     .wrap(Wrap { trim: true })
@@ -337,12 +338,13 @@ impl Widget for GameOverWidget {
         Self: Sized,
     {
         Paragraph::new(vec![
-            Line::from("Vitória!".green()),
-            Line::from(format!(
-                "Você descobriu {} palavras e obteve {} pontos!",
-                self.words, self.points
+            Line::from(t!("victory").green()),
+            Line::from(t!(
+                "victory.line_1",
+                words => self.words,
+                points => self.points,
             )),
-            Line::from("Aperte ] para ir ao próximo jogo."),
+            Line::from(t!("victory.line_2")),
         ])
         .block(
             Block::bordered()

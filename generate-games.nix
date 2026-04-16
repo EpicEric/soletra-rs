@@ -1,4 +1,5 @@
 {
+  language ? "pt",
   system ? builtins.currentSystem,
   sources ? import ./npins,
   pkgs ? import sources.nixpkgs { inherit system; },
@@ -8,18 +9,36 @@ let
     ps.pydantic
     ps.tqdm
   ]);
+
+  args = {
+    inherit language;
+    nativeBuildInputs = [ python3 ];
+    LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
+  }
+  // (
+    {
+      pt = {
+        lista-de-palavras = pkgs.fetchurl {
+          url = "https://web.archive.org/web/20260403013752/http://200.17.137.109:8081/novobsi/Members/cicerog/disciplinas/introducao-a-programacao/arquivos-2015-2/algoritmos/Lista-de-Palavras.txt";
+          hash = "sha256-Xn3mYiGbJEvmboyyxQb3d27GvnXKi1cCjOM3mkQGaEo=";
+        };
+        pt-br = pkgs.fetchFromGitHub {
+          repo = "pt-br";
+          owner = "fserb";
+          rev = "93ba2a6f3b2f85262fba72df09d448c6bb2fa50a";
+          hash = "sha256-HrBYUdUxWfLGMVOwhMoamWU92oqcIQ0UC6pwOZdQpKU=";
+        };
+      };
+      en = {
+        google-10000-english = pkgs.fetchFromGitHub {
+          repo = "google-10000-english";
+          owner = "first20hours";
+          rev = "bdf4c221bc120b0b7f6c3f1eff1cc1abb975f8d8";
+          hash = "sha256-DZUA5EH1JcJNqGfcavHuS6enMgx2qUggFDb2Jw6Vofk=";
+        };
+      };
+    }
+    .${language}
+  );
 in
-pkgs.runCommand "soletra-rs-games.json" {
-  lista-de-palavras = pkgs.fetchurl {
-    url = "https://web.archive.org/web/20260403013752/http://200.17.137.109:8081/novobsi/Members/cicerog/disciplinas/introducao-a-programacao/arquivos-2015-2/algoritmos/Lista-de-Palavras.txt";
-    hash = "sha256-Xn3mYiGbJEvmboyyxQb3d27GvnXKi1cCjOM3mkQGaEo=";
-  };
-  pt-br = pkgs.fetchFromGitHub {
-    repo = "pt-br";
-    owner = "fserb";
-    rev = "93ba2a6f3b2f85262fba72df09d448c6bb2fa50a";
-    hash = "sha256-HrBYUdUxWfLGMVOwhMoamWU92oqcIQ0UC6pwOZdQpKU=";
-  };
-  nativeBuildInputs = [ python3 ];
-  LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
-} "python3 ${./generate-games.py}"
+pkgs.runCommand "soletra-rs-games.json" args "python3 ${./generate-games.py}"
