@@ -16,11 +16,11 @@ use ratatui::{
 };
 use rust_i18n::t;
 use serde::{Deserialize, Serialize};
+use smol::{Timer, fs, stream::StreamExt};
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
-use tokio::{fs, sync::mpsc, time::interval};
 use tui_scrollview::ScrollViewState;
 
 use crate::{
@@ -142,16 +142,17 @@ impl App {
 
     pub(crate) async fn run(&mut self, terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
         crossterm::execute!(terminal.backend_mut(), EnableMouseCapture)?;
-        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (tx, rx) = async_channel::bounded(32);
 
         // Spawn event handler task
         let event_tx = tx.clone();
-        tokio::spawn(async move {
+        smol::spawn(async move {
             event_handler(event_tx).await;
-        });
+        })
+        .detach();
 
-        let mut frame_interval = interval(FRAME_DURATION);
-        let mut prev = frame_interval.tick().await;
+        let mut frame_interval = Timer::interval(FRAME_DURATION);
+        let mut prev = Instant::now();
 
         loop {
             // Handle events
@@ -165,12 +166,15 @@ impl App {
 
             // Render terminal
             self.render(terminal, &tx).await?;
-            let curr = frame_interval.tick().await;
+            let curr = frame_interval
+                .next()
+                .await
+                .expect("timer finished unexpectedly");
             self.elapsed = curr.duration_since(prev);
             self.guess_result_state.tick(self.elapsed);
             self.game_over_state.tick(self.elapsed);
             if let Some(game_over) = self.game_over
-                && curr.into_std() >= game_over
+                && curr >= game_over
             {
                 self.game_over_state.open();
                 self.game_over = None;
@@ -182,7 +186,7 @@ impl App {
     async fn render(
         &mut self,
         terminal: &mut DefaultTerminal,
-        tx: &mpsc::UnboundedSender<AppEvent>,
+        tx: &async_channel::Sender<AppEvent>,
     ) -> color_eyre::Result<()> {
         if self.data.current_game >= self.data.active_games.len() {
             match self.games.as_ref() {
@@ -211,15 +215,16 @@ impl App {
                     if !self.loading_games {
                         self.loading_games = true;
                         let tx = tx.clone();
-                        tokio::spawn(async move {
-                            let result = tokio::task::spawn_blocking(|| {
-                                serde_json::from_str::<Vec<Game>>(GAMES)
-                            })
-                            .await;
-                            if let Ok(Ok(games)) = result {
-                                let _ = tx.send(AppEvent::GamesLoaded(games));
+                        smol::spawn(async move {
+                            if let Ok(games) =
+                                blocking::unblock(|| serde_json::from_str::<Vec<Game>>(GAMES)).await
+                            {
+                                tx.send(AppEvent::GamesLoaded(games))
+                                    .await
+                                    .expect("channel isn't closed");
                             }
-                        });
+                        })
+                        .detach();
                     }
                 }
             }
@@ -504,23 +509,23 @@ impl App {
     }
 }
 
-async fn event_handler(tx: mpsc::UnboundedSender<AppEvent>) {
+async fn event_handler(tx: async_channel::Sender<AppEvent>) {
     loop {
         if event::poll(Duration::from_millis(10)).unwrap_or(false) {
             match event::read() {
                 Ok(Event::Key(key)) => {
-                    if tx.send(AppEvent::Key(key)).is_err() {
+                    if tx.send(AppEvent::Key(key)).await.is_err() {
                         break;
                     }
                 }
                 Ok(Event::Mouse(mouse)) => {
-                    if tx.send(AppEvent::Mouse(mouse)).is_err() {
+                    if tx.send(AppEvent::Mouse(mouse)).await.is_err() {
                         break;
                     }
                 }
                 _ => {}
             }
         }
-        tokio::time::sleep(Duration::from_millis(1)).await;
+        Timer::after(Duration::from_millis(1)).await;
     }
 }
