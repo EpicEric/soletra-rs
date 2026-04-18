@@ -82,8 +82,7 @@ def generate_pt_words() -> Generator[tuple[Word, set[str]], Any, None]:
             if (
                 word_normalized
                 and len(letters_word) <= 7
-                and len(word_original) >= 4
-                and len(word_original) <= MAX_CHARACTERS
+                and 4 <= len(word_original) <= MAX_CHARACTERS
                 and (
                     word_original in verbs
                     or word_normalized.lower().replace("ç", "c") in sensible_word_list
@@ -107,10 +106,10 @@ def generate_en_words() -> Generator[tuple[Word, set[str]], Any, None]:
         )
     ) as f:
         for line in f:
-            word = line.strip()
+            word_original = line.strip()
             letters_word: set[str] = set()
             word_normalized: str | None = ""
-            for letter in word.lower():
+            for letter in word_original.lower():
                 if (normalized_letter := LETTERS_INV.get(letter)) is None:
                     word_normalized = None
                     break
@@ -119,12 +118,11 @@ def generate_en_words() -> Generator[tuple[Word, set[str]], Any, None]:
             if (
                 word_normalized
                 and len(letters_word) <= 7
-                and len(word) >= 4
-                and len(word) <= MAX_CHARACTERS
+                and 4 <= len(word_original) <= MAX_CHARACTERS
             ):
                 yield (
                     Word(
-                        original=word,
+                        original=word_original,
                         normalized=word_normalized,
                         is_pangram=len(letters_word) == 7,
                     ),
@@ -144,15 +142,17 @@ def main():
         raise ValueError(f"Unknown language '{language}'. Valid values are: 'pt', 'en'")
     print(f"Selected language: {language}")
 
-    # TODO: Use better structure for lookup
-    words: list[Word] = []
+    words: dict[str, list[Word]] = {}
     pangrams: set[str] = set()
+    word_count = 0
     for word, letters_word in generator:
-        words.append(word)
+        word_count += 1
+        sorted_letters = "".join(sorted(letters_word, key=locale.strxfrm))
+        words.setdefault(sorted_letters, []).append(word)
         if word.is_pangram:
-            pangrams.add("".join(sorted(letters_word, key=locale.strxfrm)))
+            pangrams.add("".join(sorted_letters))
 
-    print(f"Found {len(words)} words and {len(pangrams)} playable letter combinations!")
+    print(f"Found {word_count} words and {len(pangrams)} playable letter combinations!")
 
     games: list[Game] = []
     print("Populating games...")
@@ -161,9 +161,19 @@ def main():
             letter: {} for letter in pangram
         }
 
-        for word in words:
-            if all(letter in letters_pangram for letter in word.normalized):
-                for letter in word.normalized:
+        for letter in pangram:
+            remaining_letters = "".join(
+                [other_letter for other_letter in pangram if other_letter != letter]
+            )
+            for i in range(1, 2**6):
+                set_letters = [letter]
+                for j, other_letter in enumerate(remaining_letters):
+                    if i & (2**j):
+                        set_letters.append(other_letter)
+                for word in words.get(
+                    "".join(sorted(set_letters, key=locale.strxfrm)),
+                    [],
+                ):
                     letters_pangram[letter].setdefault(word.normalized, []).append(word)
 
         for letter, words_dict in sorted(
