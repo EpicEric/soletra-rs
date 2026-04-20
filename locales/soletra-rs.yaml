@@ -2,6 +2,9 @@ _version: 2
 loading:
   pt: "Carregando..."
   en: "Loading..."
+populating_games:
+  pt: "Populando jogos..."
+  en: "Populating games..."
 game_number:
   pt: " Jogo #%{game} "
   en: " Game #%{game} "

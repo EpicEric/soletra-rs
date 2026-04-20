@@ -3,7 +3,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
-pub(crate) struct NormalizedString(String);
+pub(crate) struct NormalizedString(pub(crate) String);
 
 impl FromStr for NormalizedString {
     type Err = ();
@@ -14,7 +14,7 @@ impl FromStr for NormalizedString {
             .chars()
             .map(|char| normalize_character(char).ok_or(()))
             .collect();
-        inner.map(NormalizedString)
+        inner.map(Self)
     }
 }
 

@@ -39,7 +39,7 @@ const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
     author: "EpicEric",
 };
 const SAVE_DATA: &str = concat!(env!("SOLETRA_RS_LANGUAGE"), ".json");
-const MAX_CHARACTERS: usize = 19;
+pub(crate) const MAX_CHARACTERS: usize = 19;
 
 #[derive(Default, Serialize, Deserialize)]
 pub(crate) struct AppData {

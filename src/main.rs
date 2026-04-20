@@ -1,5 +1,7 @@
 mod app;
 mod game;
+mod generate;
+mod language;
 mod normalize;
 mod widgets;
 
