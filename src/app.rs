@@ -1,4 +1,3 @@
-use color_eyre::eyre::eyre;
 use crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
     MouseButton, MouseEventKind,
@@ -13,7 +12,7 @@ use ratatui::{
     layout::{Constraint, Layout, Offset, Position, Rect},
     style::{Style, Stylize},
     text::Line,
-    widgets::{Block, BorderType, Gauge, ListState, Paragraph, Widget},
+    widgets::{Block, BorderType, Gauge, Paragraph, Widget},
 };
 use rust_i18n::t;
 use serde::{Deserialize, Serialize};
@@ -63,7 +62,7 @@ pub(crate) struct App {
     areas: AppAreas,
 
     // Language state
-    language_list_state: ListState,
+    selected_language: Language,
 
     // Game state
     result: Option<(GuessResult, Instant)>,
@@ -80,8 +79,8 @@ pub(crate) struct App {
 #[derive(Default)]
 pub(crate) struct AppAreas {
     // Language areas
-    pub(crate) button_portuguese: Rect,
-    pub(crate) button_english: Rect,
+    pub(crate) button_left: Rect,
+    pub(crate) button_right: Rect,
 
     // Game areas
     pub(crate) button_main: Rect,
@@ -187,7 +186,7 @@ impl App {
             downloading_files: false,
             loading_games: false,
             areas: Default::default(),
-            language_list_state: Default::default(),
+            selected_language: language.unwrap_or(Language::Portuguese),
             result: None,
             game_over: None,
             input: String::new(),
@@ -363,15 +362,17 @@ impl App {
         frame.render_widget(&soletra_frame, frame.area());
         let inner_area = soletra_frame.inner(frame.area());
         frame.render_stateful_widget(
-            LanguageSelectWidget,
+            LanguageSelectWidget {
+                language: self.selected_language,
+            },
             inner_area,
-            &mut self.language_list_state,
+            &mut self.areas,
         );
     }
 
     fn render_game(&mut self, frame: &mut Frame) {
-        self.areas.button_portuguese = Rect::ZERO;
-        self.areas.button_english = Rect::ZERO;
+        self.areas.button_left = Rect::ZERO;
+        self.areas.button_right = Rect::ZERO;
 
         let data = self.data.as_mut().expect("no data in render_game");
         let game = data
@@ -609,29 +610,26 @@ impl App {
                             {
                                 self.should_quit = true;
                             }
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                self.language_list_state.select_previous()
+                            KeyCode::Left | KeyCode::Char('h') => {
+                                self.selected_language = match self.selected_language {
+                                    Language::Portuguese => Language::English,
+                                    Language::English => Language::Portuguese,
+                                };
                             }
-                            KeyCode::Down | KeyCode::Char('j') => {
-                                self.language_list_state.select_next()
+                            KeyCode::Right | KeyCode::Char('l') => {
+                                self.selected_language = match self.selected_language {
+                                    Language::Portuguese => Language::English,
+                                    Language::English => Language::Portuguese,
+                                };
                             }
                             KeyCode::Enter => {
-                                if let Some(selected) = self.language_list_state.selected() {
-                                    let language = match selected {
-                                        0 => Language::Portuguese,
-                                        1 => Language::English,
-                                        index => {
-                                            return Err(eyre!("Unknown language index {index}"));
-                                        }
-                                    };
-                                    self.language = Some(language);
-                                    self.data = Some(AppData::load(language).await?);
-                                    let shortcode = language.shortcode();
-                                    rust_i18n::set_locale(shortcode);
-                                    fs::write(AppDir::new()?.get_language_path(), shortcode)
-                                        .await?;
-                                    self.load_games(language).await?;
-                                }
+                                let language = self.selected_language;
+                                self.language = Some(language);
+                                self.data = Some(AppData::load(language).await?);
+                                let shortcode = language.shortcode();
+                                rust_i18n::set_locale(shortcode);
+                                fs::write(AppDir::new()?.get_language_path(), shortcode).await?;
+                                self.load_games(language).await?;
                             }
                             _ => {}
                         }
@@ -642,19 +640,16 @@ impl App {
                 if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
                     let position = Position::new(mouse.column, mouse.row);
                     if self.language.is_none() {
-                        let mut language = None;
-                        if self.areas.button_portuguese.contains(position) {
-                            language = Some(Language::Portuguese);
-                        } else if self.areas.button_english.contains(position) {
-                            language = Some(Language::English);
-                        }
-                        if let Some(language) = language {
-                            self.language = Some(language);
-                            self.data = Some(AppData::load(language).await?);
-                            let shortcode = language.shortcode();
-                            rust_i18n::set_locale(shortcode);
-                            fs::write(AppDir::new()?.get_language_path(), shortcode).await?;
-                            self.load_games(language).await?;
+                        if self.areas.button_left.contains(position) {
+                            self.selected_language = match self.selected_language {
+                                Language::Portuguese => Language::English,
+                                Language::English => Language::Portuguese,
+                            };
+                        } else if self.areas.button_right.contains(position) {
+                            self.selected_language = match self.selected_language {
+                                Language::Portuguese => Language::English,
+                                Language::English => Language::Portuguese,
+                            };
                         }
                     } else if let Some(data) = self.data.as_mut()
                         && let Some(game) = data.active_games.get_mut(data.current_game)

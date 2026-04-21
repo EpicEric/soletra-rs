@@ -3,9 +3,9 @@ use std::time::Duration;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Margin, Position, Rect, Size},
-    style::{Color, Modifier, Style, Stylize},
+    style::{Color, Style, Stylize},
     text::{Line, ToSpan},
-    widgets::{Block, BorderType, List, ListState, Paragraph, StatefulWidget, Widget, Wrap},
+    widgets::{Block, BorderType, Paragraph, StatefulWidget, Widget, Wrap},
 };
 use rust_i18n::t;
 use tui_scrollview::{ScrollView, ScrollViewState};
@@ -16,7 +16,9 @@ use crate::{
     language::Language,
 };
 
-pub(crate) struct LanguageSelectWidget;
+pub(crate) struct LanguageSelectWidget {
+    pub(crate) language: Language,
+}
 
 pub(crate) struct HoneycombWidget {
     pub(crate) main_letter: char,
@@ -50,17 +52,44 @@ pub(crate) struct GameOverWidget {
 }
 
 impl StatefulWidget for LanguageSelectWidget {
-    type State = ListState;
+    type State = AppAreas;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let list = List::new([
-            Language::Portuguese.to_string(),
-            Language::English.to_string(),
+        let [_, left, flag, right, _] = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Length(5),
+            Constraint::Length(30),
+            Constraint::Length(5),
+            Constraint::Fill(1),
         ])
-        .style(Color::White)
-        .highlight_style(Modifier::REVERSED);
+        .spacing(1)
+        .areas(area);
 
-        <List as StatefulWidget>::render(list, area, buf, state);
+        let rect_left = left.centered_vertically(Constraint::Length(3));
+        let rect_right = right.centered_vertically(Constraint::Length(3));
+        let rect_middle = flag.centered_vertically(Constraint::Length(12));
+
+        state.button_left = rect_left;
+        state.button_right = rect_right;
+
+        let block_left = Block::bordered();
+        let inner_left = block_left.inner(rect_left);
+        block_left.render(rect_left, buf);
+        "".bold().into_centered_line().render(inner_left, buf);
+
+        let block_right = Block::bordered();
+        let inner_right = block_right.inner(rect_right);
+        block_right.render(rect_right, buf);
+        "".bold().into_centered_line().render(inner_right, buf);
+
+        let [rect_flag, rect_language] =
+            Layout::vertical([Constraint::Length(10), Constraint::Length(1)])
+                .spacing(1)
+                .areas(rect_middle);
+        self.language.render_flag(rect_flag, buf);
+        Paragraph::new(self.language.to_string())
+            .centered()
+            .render(rect_language, buf);
     }
 }
 

@@ -2,6 +2,13 @@ use std::{collections::HashSet, fmt::Display, str::FromStr};
 
 use async_compat::Compat;
 use color_eyre::eyre::eyre;
+use ratatui::{
+    buffer::Buffer,
+    layout::{Constraint, Rect},
+    style::Stylize,
+    text::{Line, Text},
+    widgets::Widget,
+};
 
 use crate::normalize::NormalizedString;
 
@@ -25,6 +32,76 @@ impl Language {
             Language::Portuguese => "pt",
             Language::English => "en",
         }
+    }
+
+    pub(crate) fn render_flag(&self, area: Rect, buf: &mut Buffer) {
+        let area = area.centered(Constraint::Length(30), Constraint::Length(10));
+        let lines = match self {
+            Language::Portuguese => {
+                vec![
+                    Line::from("██████████████████████████████".green()),
+                    Line::from("█████████████▀ ▀██████████████".green().on_yellow()),
+                    Line::from("██████████▀       ▀███████████".green().on_yellow()),
+                    Line::from(vec![
+                        "███████▀    ".green().on_yellow(),
+                        "▄███▄".blue().on_yellow(),
+                        "    ▀████████".green().on_yellow(),
+                    ]),
+                    Line::from(vec![
+                        "████▀     ".green().on_yellow(),
+                        "▄".blue().on_yellow(),
+                        "█▄▄▀▀██".blue().on_white(),
+                        "▄".blue().on_yellow(),
+                        "     ▀█████".green().on_yellow(),
+                    ]),
+                    Line::from(vec![
+                        "████▄     ".green().on_yellow(),
+                        "▀█████".blue().on_yellow(),
+                        "▄▄".blue().on_white(),
+                        "▀".blue().on_yellow(),
+                        "     ▄█████".green().on_yellow(),
+                    ]),
+                    Line::from(vec![
+                        "███████▄    ".green().on_yellow(),
+                        "▀███▀".blue().on_yellow(),
+                        "    ▄████████".green().on_yellow(),
+                    ]),
+                    Line::from("██████████▄       ▄███████████".green().on_yellow()),
+                    Line::from("█████████████▄ ▄██████████████".green().on_yellow()),
+                    Line::from("██████████████████████████████".green()),
+                ]
+            }
+            Language::English => {
+                vec![
+                    Line::from(vec![
+                        "█▀█▀█▀█▀█▀█▀█▀█".blue().on_white(),
+                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white(),
+                    ]),
+                    Line::from(vec![
+                        "█▀█▀█▀█▀█▀█▀█▀█".blue().on_white(),
+                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white(),
+                    ]),
+                    Line::from(vec![
+                        "█▀█▀█▀█▀█▀█▀█▀█".blue().on_white(),
+                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white(),
+                    ]),
+                    Line::from(vec![
+                        "█▀█▀█▀█▀█▀█▀█▀█".blue().on_white(),
+                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white(),
+                    ]),
+                    Line::from(vec![
+                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".blue().on_white(),
+                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white(),
+                    ]),
+                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white()),
+                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white()),
+                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white()),
+                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white()),
+                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white()),
+                ]
+            }
+        };
+        Text::from(lines).render(area, buf);
     }
 
     pub(crate) async fn get_words(&self) -> color_eyre::Result<Vec<String>> {
