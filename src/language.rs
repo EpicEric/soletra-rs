@@ -16,7 +16,8 @@ const PT_VERBOS: &str = "https://raw.githubusercontent.com/fserb/pt-br/93ba2a6f3
 const PT_ICF: &str =
     "https://raw.githubusercontent.com/fserb/pt-br/93ba2a6f3b2f85262fba72df09d448c6bb2fa50a/icf";
 
-const EN_GOOGLE_10000: &str = "https://raw.githubusercontent.com/first20hours/google-10000-english/bdf4c221bc120b0b7f6c3f1eff1cc1abb975f8d8/google-10000-english-no-swears.txt";
+const EN_ENABLE_1: &str = "https://norvig.com/ngrams/enable1.txt";
+const EN_COUNT_1W: &str = "https://norvig.com/ngrams/count_1w.txt";
 
 impl Language {
     pub(crate) fn shortcode(&self) -> &'static str {
@@ -86,18 +87,45 @@ impl Language {
             }
 
             Language::English => {
-                let google_10000_english = Compat::new(async {
-                    match reqwest::get(EN_GOOGLE_10000).await {
+                let count_1w = Compat::new(async {
+                    match reqwest::get(EN_COUNT_1W).await {
                         Ok(request) => Ok(request.text().await?),
                         Err(error) => Err(color_eyre::Report::from(error)),
                     }
                 })
                 .await?;
-                for line in google_10000_english.trim().lines() {
+                let enable_1 = Compat::new(async {
+                    match reqwest::get(EN_ENABLE_1).await {
+                        Ok(request) => Ok(request.text().await?),
+                        Err(error) => Err(color_eyre::Report::from(error)),
+                    }
+                })
+                .await?;
+
+                let mut common_words: HashSet<String> = HashSet::new();
+                for line in count_1w.trim().lines() {
+                    let Some((word, freq)) = line.split_once('\t') else {
+                        continue;
+                    };
+                    let Ok(freq) = freq.parse::<usize>() else {
+                        continue;
+                    };
+                    if freq < 70_000 {
+                        break;
+                    }
+                    let Ok(NormalizedString(string)) = word.parse() else {
+                        continue;
+                    };
+                    common_words.insert(string);
+                }
+
+                for line in enable_1.trim().lines() {
                     let Ok(NormalizedString(string)) = line.parse() else {
                         continue;
                     };
-                    words.push(string);
+                    if common_words.contains(&string) {
+                        words.push(string);
+                    }
                 }
             }
         }
@@ -122,7 +150,7 @@ impl Display for Language {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Language::Portuguese => "Português",
-            Language::English => "English (WIP)",
+            Language::English => "English",
         })
     }
 }
