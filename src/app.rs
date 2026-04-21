@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use smol::{Timer, fs, stream::StreamExt};
 use std::{
     fs::File,
-    io::{BufReader, ErrorKind},
+    io::{BufReader, BufWriter, ErrorKind, Write},
     path::PathBuf,
     str::FromStr,
     time::{Duration, Instant},
@@ -510,6 +510,7 @@ impl App {
                             (KeyCode::Char('l'), _)
                                 if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
                             {
+                                self.games = None;
                                 self.language = None;
                                 self.data = None;
                             }
@@ -714,7 +715,9 @@ impl App {
                         match smol::unblock(move || {
                             let games = generate_games(words)?;
                             let games_path = AppDir::new()?.get_games_path(language);
-                            serde_json::to_writer(File::create(games_path)?, &games)?;
+                            let mut writer = BufWriter::new(File::create(games_path)?);
+                            serde_json::to_writer(&mut writer, &games)?;
+                            writer.flush()?;
                             Ok(games)
                         })
                         .await

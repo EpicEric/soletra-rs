@@ -81,7 +81,7 @@ impl Language {
                     if verbs.contains(&string)
                         || sensible_word_list.contains(&string.replace('ç', "c"))
                     {
-                        words.push(string);
+                        words.push(word.to_string());
                     }
                 }
             }
@@ -102,7 +102,12 @@ impl Language {
                 })
                 .await?;
 
-                let mut common_words: HashSet<String> = HashSet::new();
+                let sensible_word_list: HashSet<String> = enable_1
+                    .trim()
+                    .lines()
+                    .map(|line| line.trim().to_lowercase())
+                    .collect();
+
                 for line in count_1w.trim().lines() {
                     let Some((word, freq)) = line.split_once('\t') else {
                         continue;
@@ -116,15 +121,8 @@ impl Language {
                     let Ok(NormalizedString(string)) = word.parse() else {
                         continue;
                     };
-                    common_words.insert(string);
-                }
-
-                for line in enable_1.trim().lines() {
-                    let Ok(NormalizedString(string)) = line.parse() else {
-                        continue;
-                    };
-                    if common_words.contains(&string) {
-                        words.push(string);
+                    if sensible_word_list.contains(&string) {
+                        words.push(word.to_string());
                     }
                 }
             }
