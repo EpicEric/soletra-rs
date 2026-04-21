@@ -5,7 +5,7 @@ use color_eyre::eyre::eyre;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Rect},
-    style::Stylize,
+    style::{Color, Style, Styled},
     text::{Line, Text},
     widgets::Widget,
 };
@@ -38,66 +38,83 @@ impl Language {
         let area = area.centered(Constraint::Length(30), Constraint::Length(10));
         let lines = match self {
             Language::Portuguese => {
+                let green = Color::Rgb(0x00, 0x97, 0x39);
+                let yellow = Color::Rgb(0xFE, 0xDD, 0x00);
+                let blue = Color::Rgb(0x01, 0x21, 0x69);
+                let white = Color::Rgb(0xFF, 0xFF, 0x0FF);
+
+                let style_green = Style::new().fg(green);
+                let style_green_on_yellow = Style::new().fg(green).bg(yellow);
+                let style_blue_on_yellow = Style::new().fg(blue).bg(yellow);
+                let style_blue_on_white = Style::new().fg(blue).bg(white);
+
                 vec![
-                    Line::from("██████████████████████████████".green()),
-                    Line::from("█████████████▀ ▀██████████████".green().on_yellow()),
-                    Line::from("██████████▀       ▀███████████".green().on_yellow()),
+                    Line::from("██████████████████████████████".set_style(green)),
+                    Line::from("█████████████▀ ▀██████████████".set_style(style_green_on_yellow)),
+                    Line::from("██████████▀       ▀███████████".set_style(style_green_on_yellow)),
                     Line::from(vec![
-                        "███████▀    ".green().on_yellow(),
-                        "▄███▄".blue().on_yellow(),
-                        "    ▀████████".green().on_yellow(),
+                        "███████▀    ".set_style(style_green_on_yellow),
+                        "▄███▄".set_style(style_blue_on_yellow),
+                        "    ▀████████".set_style(style_green_on_yellow),
                     ]),
                     Line::from(vec![
-                        "████▀     ".green().on_yellow(),
-                        "▄".blue().on_yellow(),
-                        "█▄▄▀▀██".blue().on_white(),
-                        "▄".blue().on_yellow(),
-                        "     ▀█████".green().on_yellow(),
+                        "████▀     ".set_style(style_green_on_yellow),
+                        "▄".set_style(style_blue_on_yellow),
+                        "█▄▄▀▀██".set_style(style_blue_on_white),
+                        "▄".set_style(style_blue_on_yellow),
+                        "     ▀█████".set_style(style_green_on_yellow),
                     ]),
                     Line::from(vec![
-                        "████▄     ".green().on_yellow(),
-                        "▀█████".blue().on_yellow(),
-                        "▄▄".blue().on_white(),
-                        "▀".blue().on_yellow(),
-                        "     ▄█████".green().on_yellow(),
+                        "████▄     ".set_style(style_green_on_yellow),
+                        "▀█████".set_style(style_blue_on_yellow),
+                        "▄▄".set_style(style_blue_on_white),
+                        "▀".set_style(style_blue_on_yellow),
+                        "     ▄█████".set_style(style_green_on_yellow),
                     ]),
                     Line::from(vec![
-                        "███████▄    ".green().on_yellow(),
-                        "▀███▀".blue().on_yellow(),
-                        "    ▄████████".green().on_yellow(),
+                        "███████▄    ".set_style(style_green_on_yellow),
+                        "▀███▀".set_style(style_blue_on_yellow),
+                        "    ▄████████".set_style(style_green_on_yellow),
                     ]),
-                    Line::from("██████████▄       ▄███████████".green().on_yellow()),
-                    Line::from("█████████████▄ ▄██████████████".green().on_yellow()),
-                    Line::from("██████████████████████████████".green()),
+                    Line::from("██████████▄       ▄███████████".set_style(style_green_on_yellow)),
+                    Line::from("█████████████▄ ▄██████████████".set_style(style_green_on_yellow)),
+                    Line::from("██████████████████████████████".set_style(style_green)),
                 ]
             }
             Language::English => {
+                let red = Color::Rgb(0xB3, 0x19, 0x42);
+                let blue = Color::Rgb(0x0A, 0x31, 0x61);
+                let white = Color::Rgb(0xFF, 0xFF, 0x0FF);
+
+                let style_blue_on_white = Style::new().fg(blue).bg(white);
+                let style_red_on_white = Style::new().fg(red).bg(white);
+
                 vec![
                     Line::from(vec![
-                        "█▀█▀█▀█▀█▀█▀█▀█".blue().on_white(),
-                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white(),
+                        "█▀█▀█▀█▀█▀█▀█▀█".set_style(style_blue_on_white),
+                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".set_style(style_red_on_white),
                     ]),
                     Line::from(vec![
-                        "█▀█▀█▀█▀█▀█▀█▀█".blue().on_white(),
-                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white(),
+                        "█▀█▀█▀█▀█▀█▀█▀█".set_style(style_blue_on_white),
+                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".set_style(style_red_on_white),
                     ]),
                     Line::from(vec![
-                        "█▀█▀█▀█▀█▀█▀█▀█".blue().on_white(),
-                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white(),
+                        "█▀█▀█▀█▀█▀█▀█▀█".set_style(style_blue_on_white),
+                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".set_style(style_red_on_white),
                     ]),
                     Line::from(vec![
-                        "█▀█▀█▀█▀█▀█▀█▀█".blue().on_white(),
-                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white(),
+                        "█▀█▀█▀█▀█▀█▀█▀█".set_style(style_blue_on_white),
+                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".set_style(style_red_on_white),
                     ]),
                     Line::from(vec![
-                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".blue().on_white(),
-                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white(),
+                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".set_style(style_blue_on_white),
+                        "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".set_style(style_red_on_white),
                     ]),
-                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white()),
-                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white()),
-                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white()),
-                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white()),
-                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".red().on_white()),
+                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".set_style(style_red_on_white)),
+                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".set_style(style_red_on_white)),
+                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".set_style(style_red_on_white)),
+                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".set_style(style_red_on_white)),
+                    Line::from("▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀".set_style(style_red_on_white)),
                 ]
             }
         };
