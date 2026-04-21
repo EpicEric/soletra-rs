@@ -2,6 +2,9 @@ _version: 2
 loading:
   pt: "Carregando..."
   en: "Loading..."
+downloading_files:
+  pt: "Baixando arquivos..."
+  en: "Downloading files..."
 populating_games:
   pt: "Populando jogos..."
   en: "Populating games..."

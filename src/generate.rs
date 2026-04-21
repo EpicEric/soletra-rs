@@ -12,7 +12,7 @@ use crate::{
     normalize::{NormalizedString, normalize_character},
 };
 
-fn generate_game(words: Vec<String>) -> color_eyre::Result<Vec<Game>> {
+pub(crate) fn generate_games(words: Vec<String>) -> color_eyre::Result<Vec<Game>> {
     let mut collator = Collator::default();
 
     let mut words_map: HashMap<Vec<char>, HashMap<NormalizedString, (Vec<String>, bool)>> =

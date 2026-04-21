@@ -6,14 +6,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::normalize::NormalizedString;
 
-#[derive(Deserialize, Debug, Clone, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash)]
 pub(crate) struct Word {
     pub(crate) original: String,
     pub(crate) normalized: NormalizedString,
     pub(crate) is_pangram: bool,
 }
 
-#[derive(Deserialize, Debug, Clone, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash)]
 pub(crate) struct Game {
     pub(crate) main_letter: char,
     pub(crate) secondary_letters: [char; 6],

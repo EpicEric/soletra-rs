@@ -1,13 +1,23 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, str::FromStr};
+
+use color_eyre::eyre::eyre;
 
 use crate::normalize::NormalizedString;
 
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum Language {
     Portuguese,
     English,
 }
 
 impl Language {
+    pub(crate) fn shortcode(&self) -> &'static str {
+        match self {
+            Language::Portuguese => "pt",
+            Language::English => "en",
+        }
+    }
+
     pub(crate) async fn get_words(&self) -> color_eyre::Result<Vec<String>> {
         let mut words = Vec::new();
 
@@ -72,5 +82,17 @@ impl Language {
         }
 
         Ok(words)
+    }
+}
+
+impl FromStr for Language {
+    type Err = color_eyre::Report;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pt" => Ok(Language::Portuguese),
+            "en" => Ok(Language::English),
+            unknown => Err(eyre!("Unknown language {unknown}")),
+        }
     }
 }

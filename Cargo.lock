@@ -2670,7 +2670,6 @@ version = "0.1.0"
 dependencies = [
  "app_dirs2",
  "async-channel",
- "blocking",
  "color-eyre",
  "crossterm",
  "feruca",
