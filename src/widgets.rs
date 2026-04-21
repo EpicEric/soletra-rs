@@ -3,9 +3,9 @@ use std::time::Duration;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Margin, Position, Rect, Size},
-    style::{Color, Style, Stylize},
+    style::{Color, Modifier, Style, Stylize},
     text::{Line, ToSpan},
-    widgets::{Block, BorderType, Paragraph, StatefulWidget, Widget, Wrap},
+    widgets::{Block, BorderType, List, ListState, Paragraph, StatefulWidget, Widget, Wrap},
 };
 use rust_i18n::t;
 use tui_scrollview::{ScrollView, ScrollViewState};
@@ -13,7 +13,10 @@ use tui_scrollview::{ScrollView, ScrollViewState};
 use crate::{
     app::AppAreas,
     game::{ActiveGameWord, GuessResult},
+    language::Language,
 };
+
+pub(crate) struct LanguageSelectWidget;
 
 pub(crate) struct HoneycombWidget {
     pub(crate) main_letter: char,
@@ -44,6 +47,21 @@ pub(crate) struct GuessResultWidget<'a> {
 pub(crate) struct GameOverWidget {
     pub(crate) points: u16,
     pub(crate) words: usize,
+}
+
+impl StatefulWidget for LanguageSelectWidget {
+    type State = ListState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let list = List::new([
+            Language::Portuguese.to_string(),
+            Language::English.to_string(),
+        ])
+        .style(Color::White)
+        .highlight_style(Modifier::REVERSED);
+
+        <List as StatefulWidget>::render(list, area, buf, state);
+    }
 }
 
 impl StatefulWidget for HoneycombWidget {

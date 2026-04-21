@@ -10,12 +10,5 @@
   ),
 }:
 craneLib.devShell {
-  packages = [
-    (pkgs.python313.withPackages (ps: [
-      ps.pydantic
-      ps.tqdm
-    ]))
-  ];
-
-  SOLETRA_RS_LANGUAGE = "pt";
+  packages = [ ];
 }

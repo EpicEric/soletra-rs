@@ -1,3 +1,4 @@
+use color_eyre::eyre::eyre;
 use crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
     MouseButton, MouseEventKind,
@@ -12,15 +13,16 @@ use ratatui::{
     layout::{Constraint, Layout, Offset, Position, Rect},
     style::{Style, Stylize},
     text::Line,
-    widgets::{Block, BorderType, Gauge, Paragraph, Widget},
+    widgets::{Block, BorderType, Gauge, ListState, Paragraph, Widget},
 };
 use rust_i18n::t;
 use serde::{Deserialize, Serialize};
 use smol::{Timer, fs, stream::StreamExt};
 use std::{
     fs::File,
-    io::ErrorKind,
+    io::{BufReader, ErrorKind},
     path::PathBuf,
+    str::FromStr,
     time::{Duration, Instant},
 };
 use tui_scrollview::ScrollViewState;
@@ -31,16 +33,12 @@ use crate::{
     language::Language,
     widgets::{
         ActionsWidget, GameOverWidget, GuessResultWidget, GuessesWidget, HoneycombWidget,
-        InputWidget, InputWidgetState,
+        InputWidget, InputWidgetState, LanguageSelectWidget,
     },
 };
 
 const FPS: u64 = 30;
 const FRAME_DURATION: Duration = Duration::from_millis(1_000 / FPS);
-const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
-    name: "SoletraRs",
-    author: "EpicEric",
-};
 pub(crate) const MAX_CHARACTERS: usize = 19;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -52,16 +50,25 @@ pub(crate) struct AppData {
 }
 
 pub(crate) struct App {
+    // Base app data
     language: Option<Language>,
     data: Option<AppData>,
     tx: Option<async_channel::Sender<AppEvent>>,
     games: Option<Vec<Game>>,
+    should_quit: bool,
+    downloading_files: bool,
+    loading_games: bool,
+
+    // Interactive buttons
+    areas: AppAreas,
+
+    // Language state
+    language_list_state: ListState,
+
+    // Game state
     result: Option<(GuessResult, Instant)>,
     game_over: Option<Instant>,
     input: String,
-    should_quit: bool,
-    loading_games: bool,
-    areas: AppAreas,
     rows: usize,
     scroll_view_state: ScrollViewState,
     guess_result_state: tui_overlay::OverlayState,
@@ -72,9 +79,11 @@ pub(crate) struct App {
 
 #[derive(Default)]
 pub(crate) struct AppAreas {
+    // Language areas
     pub(crate) button_portuguese: Rect,
     pub(crate) button_english: Rect,
 
+    // Game areas
     pub(crate) button_main: Rect,
     pub(crate) button_one: Rect,
     pub(crate) button_two: Rect,
@@ -92,22 +101,45 @@ pub(crate) struct AppAreas {
 pub(crate) enum AppEvent {
     Key(KeyEvent),
     Mouse(event::MouseEvent),
-    LanguageSelected(Language),
+    DownloadingFiles,
     WordsRetrieved(Vec<String>, Language),
     GamesLoaded(Vec<Game>),
     Error(color_eyre::Report),
 }
 
-fn get_app_dir() -> color_eyre::Result<PathBuf> {
-    Ok(app_dirs2::get_app_root(
-        app_dirs2::AppDataType::UserData,
-        &APP_INFO,
-    )?)
+struct AppDir(PathBuf);
+
+impl AppDir {
+    fn new() -> color_eyre::Result<Self> {
+        Ok(Self(app_dirs2::get_app_root(
+            app_dirs2::AppDataType::UserData,
+            &app_dirs2::AppInfo {
+                name: "SoletraRs",
+                author: "EpicEric",
+            },
+        )?))
+    }
+
+    fn get_base_path(&self) -> PathBuf {
+        self.0.clone()
+    }
+
+    fn get_language_path(&self) -> PathBuf {
+        self.0.join("language")
+    }
+
+    fn get_games_path(&self, language: Language) -> PathBuf {
+        self.0.join(format!("games_{}.json", language.shortcode()))
+    }
+
+    fn get_save_path(&self, language: Language) -> PathBuf {
+        self.0.join(format!("{}.json", language.shortcode()))
+    }
 }
 
 impl AppData {
     async fn load(language: Language) -> color_eyre::Result<Self> {
-        let save_path = get_app_dir()?.join(format!("{}.json", language.shortcode()));
+        let save_path = AppDir::new()?.get_save_path(language);
         if save_path.exists() && save_path.is_file() {
             let path = save_path.clone();
             let data: color_eyre::Result<AppData> = smol::unblock(move || {
@@ -132,14 +164,15 @@ impl AppData {
 
 impl App {
     pub(crate) async fn init() -> color_eyre::Result<Self> {
-        let dir = app_dirs2::get_app_root(app_dirs2::AppDataType::UserData, &APP_INFO)?;
-        fs::create_dir_all(&dir).await?;
+        let app_dir = AppDir::new()?;
+        fs::create_dir_all(app_dir.get_base_path()).await?;
 
         let (language, data) = if let Ok(language_str) =
-            fs::read_to_string(dir.join("language")).await
-            && let Ok(language) = language_str.parse()
+            fs::read_to_string(app_dir.get_language_path()).await
+            && let Ok(language) = Language::from_str(language_str.trim())
         {
-            rust_i18n::set_locale(&language_str);
+            let language_str = language.shortcode();
+            rust_i18n::set_locale(language_str);
             (Some(language), Some(AppData::load(language).await?))
         } else {
             (None, None)
@@ -150,12 +183,14 @@ impl App {
             data,
             tx: None,
             games: None,
+            should_quit: false,
+            downloading_files: false,
+            loading_games: false,
+            areas: Default::default(),
+            language_list_state: Default::default(),
             result: None,
             game_over: None,
             input: String::new(),
-            should_quit: false,
-            loading_games: false,
-            areas: Default::default(),
             rows: 1,
             scroll_view_state: Default::default(),
             guess_result_state: tui_overlay::OverlayState::new()
@@ -214,47 +249,57 @@ impl App {
     }
 
     async fn load_games(&mut self, language: Language) -> color_eyre::Result<()> {
-        if let Some(tx) = self.tx.clone() {
-            smol::spawn(async move {
-                let app_dir = match get_app_dir() {
-                    Ok(app_dir) => app_dir,
-                    Err(error) => {
-                        tx.send(AppEvent::Error(error.into()))
-                            .await
-                            .expect("channel isn't closed");
-                        return;
-                    }
-                };
-                match File::open(app_dir.join(format!("games_{}.json", language.shortcode()))) {
-                    Ok(file) => match smol::unblock(|| serde_json::from_reader(file)).await {
-                        Ok(games) => tx
-                            .send(AppEvent::GamesLoaded(games))
-                            .await
-                            .expect("channel isn't closed"),
+        if !self.loading_games {
+            self.loading_games = true;
+            if let Some(tx) = self.tx.clone() {
+                smol::spawn(async move {
+                    let games_path = match AppDir::new() {
+                        Ok(app_dir) => app_dir.get_games_path(language),
+                        Err(error) => {
+                            tx.send(AppEvent::Error(error.into()))
+                                .await
+                                .expect("channel isn't closed");
+                            return;
+                        }
+                    };
+                    match File::open(games_path) {
+                        Ok(file) => {
+                            match smol::unblock(|| serde_json::from_reader(BufReader::new(file)))
+                                .await
+                            {
+                                Ok(games) => tx
+                                    .send(AppEvent::GamesLoaded(games))
+                                    .await
+                                    .expect("channel isn't closed"),
+                                Err(error) => tx
+                                    .send(AppEvent::Error(error.into()))
+                                    .await
+                                    .expect("channel isn't closed"),
+                            }
+                        }
+                        Err(error) if error.kind() == ErrorKind::NotFound => {
+                            tx.send(AppEvent::DownloadingFiles)
+                                .await
+                                .expect("channel isn't closed");
+                            match language.get_words().await {
+                                Ok(words) => tx
+                                    .send(AppEvent::WordsRetrieved(words, language))
+                                    .await
+                                    .expect("channel isn't closed"),
+                                Err(error) => tx
+                                    .send(AppEvent::Error(error.into()))
+                                    .await
+                                    .expect("channel isn't closed"),
+                            }
+                        }
                         Err(error) => tx
                             .send(AppEvent::Error(error.into()))
                             .await
                             .expect("channel isn't closed"),
-                    },
-                    Err(error) if error.kind() == ErrorKind::NotFound => {
-                        match language.get_words().await {
-                            Ok(words) => tx
-                                .send(AppEvent::WordsRetrieved(words, language))
-                                .await
-                                .expect("channel isn't closed"),
-                            Err(error) => tx
-                                .send(AppEvent::Error(error.into()))
-                                .await
-                                .expect("channel isn't closed"),
-                        }
                     }
-                    Err(error) => tx
-                        .send(AppEvent::Error(error.into()))
-                        .await
-                        .expect("channel isn't closed"),
-                }
-            })
-            .detach();
+                })
+                .detach();
+            }
         }
         Ok(())
     }
@@ -278,31 +323,56 @@ impl App {
                                 data.current_game = current_game;
                                 data.save().await?;
                                 terminal.draw(|frame| self.render_game(frame))?;
+                            } else {
+                                unreachable!("cannot sample another game")
                             }
                         }
                         None => {
-                            terminal.draw(App::render_loading)?;
-
-                            // Only spawn the loading task once
-                            if !self.loading_games {
-                                self.loading_games = true;
-                                self.load_games(language).await?;
-                            }
+                            terminal.draw(|frame| self.render_loading(frame))?;
+                            self.load_games(language).await?;
                         }
                     }
                 } else {
                     terminal.draw(|frame| self.render_game(frame))?;
                 }
             } else {
-                todo!();
+                unreachable!("language set but data unset");
             }
         } else {
-            todo!();
+            terminal.draw(|frame| self.render_language_selection(frame))?;
         }
         Ok(())
     }
 
+    fn render_language_selection(&mut self, frame: &mut Frame) {
+        self.areas.button_main = Rect::ZERO;
+        self.areas.button_one = Rect::ZERO;
+        self.areas.button_two = Rect::ZERO;
+        self.areas.button_three = Rect::ZERO;
+        self.areas.button_four = Rect::ZERO;
+        self.areas.button_five = Rect::ZERO;
+        self.areas.button_six = Rect::ZERO;
+        self.areas.button_shuffle = Rect::ZERO;
+        self.areas.button_reset_shuffle = Rect::ZERO;
+        self.areas.button_backspace = Rect::ZERO;
+        self.areas.button_submit = Rect::ZERO;
+
+        let soletra_frame = Block::bordered()
+            .border_type(BorderType::Thick)
+            .title_top(Line::from(" soletra-rs ").centered());
+        frame.render_widget(&soletra_frame, frame.area());
+        let inner_area = soletra_frame.inner(frame.area());
+        frame.render_stateful_widget(
+            LanguageSelectWidget,
+            inner_area,
+            &mut self.language_list_state,
+        );
+    }
+
     fn render_game(&mut self, frame: &mut Frame) {
+        self.areas.button_portuguese = Rect::ZERO;
+        self.areas.button_english = Rect::ZERO;
+
         let data = self.data.as_mut().expect("no data in render_game");
         let game = data
             .active_games
@@ -408,8 +478,22 @@ impl App {
         }
     }
 
-    fn render_loading(frame: &mut Frame) {
-        frame.render_widget(Paragraph::new(t!("loading")).centered(), frame.area());
+    fn render_loading(&self, frame: &mut Frame) {
+        let soletra_frame = Block::bordered()
+            .border_type(BorderType::Thick)
+            .title_top(Line::from(" soletra-rs ").centered());
+        frame.render_widget(&soletra_frame, frame.area());
+        let inner_area = soletra_frame.inner(frame.area());
+
+        frame.render_widget(
+            Paragraph::new(if self.downloading_files {
+                t!("downloading_files")
+            } else {
+                t!("loading")
+            })
+            .centered(),
+            inner_area,
+        );
     }
 
     async fn handle_event(&mut self, event: AppEvent) -> color_eyre::Result<()> {
@@ -422,6 +506,12 @@ impl App {
                                 if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
                             {
                                 self.should_quit = true;
+                            }
+                            (KeyCode::Char('l'), _)
+                                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+                            {
+                                self.language = None;
+                                self.data = None;
                             }
                             (KeyCode::Char('['), _) => {
                                 self.scroll_view_state.set_offset(Position::new(0, 0));
@@ -513,78 +603,117 @@ impl App {
                         }
                     } else {
                         match key.code {
-                            KeyCode::Up | KeyCode::Char('k') => todo!(),
-                            KeyCode::Down | KeyCode::Char('j') => todo!(),
-                            KeyCode::Enter => todo!(),
+                            KeyCode::Char('c')
+                                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+                            {
+                                self.should_quit = true;
+                            }
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                self.language_list_state.select_previous()
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                self.language_list_state.select_next()
+                            }
+                            KeyCode::Enter => {
+                                if let Some(selected) = self.language_list_state.selected() {
+                                    let language = match selected {
+                                        0 => Language::Portuguese,
+                                        1 => Language::English,
+                                        index => {
+                                            return Err(eyre!("Unknown language index {index}"));
+                                        }
+                                    };
+                                    self.language = Some(language);
+                                    self.data = Some(AppData::load(language).await?);
+                                    let shortcode = language.shortcode();
+                                    rust_i18n::set_locale(shortcode);
+                                    fs::write(AppDir::new()?.get_language_path(), shortcode)
+                                        .await?;
+                                    self.load_games(language).await?;
+                                }
+                            }
                             _ => {}
                         }
                     }
                 }
             }
             AppEvent::Mouse(mouse) => {
-                if self.language.is_none() {
-                } else if let Some(data) = self.data.as_mut()
-                    && let Some(game) = data.active_games.get_mut(data.current_game)
-                    && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
-                {
+                if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
                     let position = Position::new(mouse.column, mouse.row);
-                    let not_max_characters = self.input.chars().count() < MAX_CHARACTERS;
-                    if not_max_characters && self.areas.button_main.contains(position) {
-                        self.input.push(game.main_letter);
-                    } else if not_max_characters && self.areas.button_one.contains(position) {
-                        self.input.push(game.secondary_letters[0]);
-                    } else if not_max_characters && self.areas.button_two.contains(position) {
-                        self.input.push(game.secondary_letters[1]);
-                    } else if not_max_characters && self.areas.button_three.contains(position) {
-                        self.input.push(game.secondary_letters[2]);
-                    } else if not_max_characters && self.areas.button_four.contains(position) {
-                        self.input.push(game.secondary_letters[3]);
-                    } else if not_max_characters && self.areas.button_five.contains(position) {
-                        self.input.push(game.secondary_letters[4]);
-                    } else if not_max_characters && self.areas.button_six.contains(position) {
-                        self.input.push(game.secondary_letters[5]);
-                    } else if self.areas.button_shuffle.contains(position) {
-                        game.shuffle();
-                    } else if self.areas.button_reset_shuffle.contains(position) {
-                        game.reset_shuffle();
-                    } else if self.areas.button_backspace.contains(position) {
-                        self.input.pop();
-                    } else if self.areas.button_submit.contains(position) {
-                        let result = game.guess(&self.input);
-                        if let GuessResult::Success {
-                            index,
-                            is_game_over,
-                            ..
-                        } = &result
-                        {
-                            self.scroll_view_state.set_offset(Position {
-                                x: ((index / self.rows) * 23).saturating_sub(1) as u16,
-                                y: 0,
-                            });
-                            data.save().await?;
-                            if *is_game_over {
-                                self.game_over = Instant::now().checked_add(Duration::from_secs(1));
-                            }
+                    if self.language.is_none() {
+                        let mut language = None;
+                        if self.areas.button_portuguese.contains(position) {
+                            language = Some(Language::Portuguese);
+                        } else if self.areas.button_english.contains(position) {
+                            language = Some(Language::English);
                         }
-                        self.result = Some((result, Instant::now()));
-                        self.guess_result_state.open();
-                        self.input.clear();
+                        if let Some(language) = language {
+                            self.language = Some(language);
+                            self.data = Some(AppData::load(language).await?);
+                            let shortcode = language.shortcode();
+                            rust_i18n::set_locale(shortcode);
+                            fs::write(AppDir::new()?.get_language_path(), shortcode).await?;
+                            self.load_games(language).await?;
+                        }
+                    } else if let Some(data) = self.data.as_mut()
+                        && let Some(game) = data.active_games.get_mut(data.current_game)
+                    {
+                        let not_max_characters = self.input.chars().count() < MAX_CHARACTERS;
+                        if not_max_characters && self.areas.button_main.contains(position) {
+                            self.input.push(game.main_letter);
+                        } else if not_max_characters && self.areas.button_one.contains(position) {
+                            self.input.push(game.secondary_letters[0]);
+                        } else if not_max_characters && self.areas.button_two.contains(position) {
+                            self.input.push(game.secondary_letters[1]);
+                        } else if not_max_characters && self.areas.button_three.contains(position) {
+                            self.input.push(game.secondary_letters[2]);
+                        } else if not_max_characters && self.areas.button_four.contains(position) {
+                            self.input.push(game.secondary_letters[3]);
+                        } else if not_max_characters && self.areas.button_five.contains(position) {
+                            self.input.push(game.secondary_letters[4]);
+                        } else if not_max_characters && self.areas.button_six.contains(position) {
+                            self.input.push(game.secondary_letters[5]);
+                        } else if self.areas.button_shuffle.contains(position) {
+                            game.shuffle();
+                        } else if self.areas.button_reset_shuffle.contains(position) {
+                            game.reset_shuffle();
+                        } else if self.areas.button_backspace.contains(position) {
+                            self.input.pop();
+                        } else if self.areas.button_submit.contains(position) {
+                            let result = game.guess(&self.input);
+                            if let GuessResult::Success {
+                                index,
+                                is_game_over,
+                                ..
+                            } = &result
+                            {
+                                self.scroll_view_state.set_offset(Position {
+                                    x: ((index / self.rows) * 23).saturating_sub(1) as u16,
+                                    y: 0,
+                                });
+                                data.save().await?;
+                                if *is_game_over {
+                                    self.game_over =
+                                        Instant::now().checked_add(Duration::from_secs(1));
+                                }
+                            }
+                            self.result = Some((result, Instant::now()));
+                            self.guess_result_state.open();
+                            self.input.clear();
+                        }
                     }
                 }
             }
-            AppEvent::LanguageSelected(language) => {
-                rust_i18n::set_locale(language.shortcode());
-                self.language = Some(language);
-                self.data = Some(AppData::load(language).await?);
-                self.load_games(language).await?;
+            AppEvent::DownloadingFiles => {
+                self.downloading_files = true;
             }
             AppEvent::WordsRetrieved(words, language) => {
+                self.downloading_files = false;
                 if let Some(tx) = self.tx.clone() {
                     smol::spawn(async move {
                         match smol::unblock(move || {
                             let games = generate_games(words)?;
-                            let games_path =
-                                get_app_dir()?.join(format!("games_{}.json", language.shortcode()));
+                            let games_path = AppDir::new()?.get_games_path(language);
                             serde_json::to_writer(File::create(games_path)?, &games)?;
                             Ok(games)
                         })

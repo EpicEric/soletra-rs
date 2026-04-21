@@ -4,7 +4,7 @@
   inputs = { };
 
   outputs =
-    { ... }:
+    { self, ... }:
     let
       systems = [
         "x86_64-linux"
@@ -31,14 +31,10 @@
     in
     eachSystem (system: {
       packages.${system} = {
-        pt = import ./. {
-          language = "pt";
-          inherit system;
-        };
-        en = import ./. {
-          language = "en";
-          inherit system;
-        };
+        default = import ./. { inherit system; };
+        soletra-rs = self.packages.${system}.default;
+        pt = self.packages.${system}.default;
+        en = self.packages.${system}.default;
       };
 
       devShells.${system}.default = import ./shell.nix { inherit system; };

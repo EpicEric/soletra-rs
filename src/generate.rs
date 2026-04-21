@@ -18,6 +18,10 @@ pub(crate) fn generate_games(words: Vec<String>) -> color_eyre::Result<Vec<Game>
     let mut words_map: HashMap<Vec<char>, HashMap<NormalizedString, (Vec<String>, bool)>> =
         HashMap::new();
     let mut pangrams: HashSet<String> = HashSet::new();
+
+    let mut probe_bytes = [0u8; 4];
+    let mut normalized_bytes = [0u8; 4];
+
     'words: for word in words.into_iter() {
         let mut normalized_characters = Vec::<char>::with_capacity(7);
         let mut normalized_word = String::new();
@@ -31,15 +35,23 @@ pub(crate) fn generate_games(words: Vec<String>) -> color_eyre::Result<Vec<Game>
                 continue 'words;
             }
             normalized_word.push(normalized);
+            let normalized_str = normalized.encode_utf8(&mut normalized_bytes);
             match normalized_characters.binary_search_by(|probe| {
-                collator.collate(&probe.to_string(), &normalized.to_string())
+                let probe_str = probe.encode_utf8(&mut probe_bytes);
+                collator.collate(probe_str, normalized_str)
             }) {
                 Ok(_) => {}
-                Err(_) if normalized_characters.len() >= 7 => continue 'words,
                 Err(index) => {
-                    normalized_characters.insert(index, normalized);
+                    if normalized_characters.len() >= 7 {
+                        continue 'words;
+                    } else {
+                        normalized_characters.insert(index, normalized);
+                    }
                 }
             }
+        }
+        if count < 4 {
+            continue 'words;
         }
 
         let is_pangram = normalized_characters.len() == 7;
