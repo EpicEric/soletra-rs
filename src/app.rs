@@ -24,6 +24,7 @@ use std::{
     str::FromStr,
     time::{Duration, Instant},
 };
+use tempfile::NamedTempFile;
 use tui_scrollview::ScrollViewState;
 
 use crate::{
@@ -63,6 +64,9 @@ pub(crate) struct App {
 
     // Language state
     selected_language: Language,
+
+    // Loading state
+    throbber_state: throbber_widgets_tui::ThrobberState,
 
     // Game state
     result: Option<(GuessResult, Instant)>,
@@ -187,6 +191,7 @@ impl App {
             loading_games: false,
             areas: Default::default(),
             selected_language: language.unwrap_or(Language::Portuguese),
+            throbber_state: Default::default(),
             result: None,
             game_over: None,
             input: String::new(),
@@ -208,15 +213,12 @@ impl App {
         let (tx, rx) = async_channel::bounded(32);
         self.tx = Some(tx.clone());
 
-        // Spawn event handler task
         let event_tx = tx.clone();
-        smol::spawn(async move {
-            event_handler(event_tx).await;
-        })
-        .detach();
+        smol::spawn(event_handler(event_tx)).detach();
 
         let mut frame_interval = Timer::interval(FRAME_DURATION);
         let mut prev = Instant::now();
+        let mut throbber_count = 0u8;
 
         loop {
             // Handle events
@@ -235,6 +237,13 @@ impl App {
                 .await
                 .expect("timer finished unexpectedly");
             self.elapsed = curr.duration_since(prev);
+
+            if throbber_count >= 1 {
+                throbber_count = 0;
+                self.throbber_state.calc_next();
+            } else {
+                throbber_count += 1;
+            }
             self.guess_result_state.tick(self.elapsed);
             self.game_over_state.tick(self.elapsed);
             if let Some(game_over) = self.game_over
@@ -479,12 +488,27 @@ impl App {
         }
     }
 
-    fn render_loading(&self, frame: &mut Frame) {
+    fn render_loading(&mut self, frame: &mut Frame) {
         let soletra_frame = Block::bordered()
             .border_type(BorderType::Thick)
             .title_top(Line::from(" soletra-rs ").centered());
         frame.render_widget(&soletra_frame, frame.area());
-        let inner_area = soletra_frame.inner(frame.area());
+        let [_, rect_throbber, rect_text, _] = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Fill(1),
+        ])
+        .spacing(1)
+        .areas(soletra_frame.inner(frame.area()));
+
+        frame.render_stateful_widget(
+            throbber_widgets_tui::Throbber::default()
+                .throbber_set(throbber_widgets_tui::BRAILLE_SIX_DOUBLE)
+                .use_type(throbber_widgets_tui::WhichUse::Spin),
+            rect_throbber.centered_horizontally(Constraint::Length(1)),
+            &mut self.throbber_state,
+        );
 
         frame.render_widget(
             Paragraph::new(if self.downloading_files {
@@ -493,7 +517,7 @@ impl App {
                 t!("loading")
             })
             .centered(),
-            inner_area,
+            rect_text,
         );
     }
 
@@ -709,10 +733,13 @@ impl App {
                     smol::spawn(async move {
                         match smol::unblock(move || {
                             let games = generate_games(words)?;
-                            let games_path = AppDir::new()?.get_games_path(language);
-                            let mut writer = BufWriter::new(File::create(games_path)?);
+                            let tmp_file = NamedTempFile::new()?;
+                            let mut writer = BufWriter::new(&tmp_file);
                             serde_json::to_writer(&mut writer, &games)?;
                             writer.flush()?;
+                            drop(writer);
+                            let (_, tmp_path) = tmp_file.keep()?;
+                            std::fs::rename(tmp_path, AppDir::new()?.get_games_path(language))?;
                             Ok(games)
                         })
                         .await

@@ -34,6 +34,13 @@ impl Language {
         }
     }
 
+    pub(crate) fn instruction(&self) -> &'static str {
+        match self {
+            Language::Portuguese => "(Enter para selecionar)",
+            Language::English => "(Enter to select)",
+        }
+    }
+
     pub(crate) fn render_flag(&self, area: Rect, buf: &mut Buffer) {
         let area = area.centered(Constraint::Length(30), Constraint::Length(10));
         let lines = match self {

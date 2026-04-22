@@ -55,19 +55,27 @@ impl StatefulWidget for LanguageSelectWidget {
     type State = AppAreas;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let [_, left, flag, right, _] = Layout::horizontal([
-            Constraint::Fill(1),
-            Constraint::Length(5),
-            Constraint::Length(30),
-            Constraint::Length(5),
-            Constraint::Fill(1),
+        let area = area.centered(Constraint::Length(42), Constraint::Length(14));
+
+        let [rect_language, rect_middle, rect_enter] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(10),
+            Constraint::Length(1),
         ])
         .spacing(1)
         .areas(area);
 
+        let [left, flag, right] = Layout::horizontal([
+            Constraint::Length(5),
+            Constraint::Length(30),
+            Constraint::Length(5),
+        ])
+        .spacing(1)
+        .areas(rect_middle);
+
         let rect_left = left.centered_vertically(Constraint::Length(3));
         let rect_right = right.centered_vertically(Constraint::Length(3));
-        let rect_middle = flag.centered_vertically(Constraint::Length(12));
+        let rect_flag = flag.centered_vertically(Constraint::Length(12));
 
         state.button_left = rect_left;
         state.button_right = rect_right;
@@ -82,14 +90,13 @@ impl StatefulWidget for LanguageSelectWidget {
         block_right.render(rect_right, buf);
         "".bold().into_centered_line().render(inner_right, buf);
 
-        let [rect_flag, rect_language] =
-            Layout::vertical([Constraint::Length(10), Constraint::Length(1)])
-                .spacing(1)
-                .areas(rect_middle);
-        self.language.render_flag(rect_flag, buf);
         Paragraph::new(self.language.to_string())
             .centered()
             .render(rect_language, buf);
+        self.language.render_flag(rect_flag, buf);
+        Paragraph::new(self.language.instruction().dim())
+            .centered()
+            .render(rect_enter, buf);
     }
 }
 

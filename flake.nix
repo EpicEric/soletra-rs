@@ -33,8 +33,6 @@
       packages.${system} = {
         default = import ./. { inherit system; };
         soletra-rs = self.packages.${system}.default;
-        pt = self.packages.${system}.default;
-        en = self.packages.${system}.default;
       };
 
       devShells.${system}.default = import ./shell.nix { inherit system; };
