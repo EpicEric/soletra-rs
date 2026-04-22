@@ -12,10 +12,15 @@ use crate::{
     normalize::{NormalizedString, normalize_character},
 };
 
+struct NormalizedWord {
+    spellings: Vec<String>,
+    is_pangram: bool,
+}
+
 pub(crate) fn generate_games(words: Vec<String>) -> color_eyre::Result<Vec<Game>> {
     let mut collator = Collator::default();
 
-    let mut words_map: HashMap<Vec<char>, HashMap<NormalizedString, (Vec<String>, bool)>> =
+    let mut words_map: HashMap<Vec<char>, HashMap<NormalizedString, NormalizedWord>> =
         HashMap::new();
     let mut pangrams: HashSet<String> = HashSet::new();
 
@@ -59,17 +64,20 @@ pub(crate) fn generate_games(words: Vec<String>) -> color_eyre::Result<Vec<Game>
             pangrams.insert(normalized_characters.iter().collect());
         }
 
-        let normalized_word_vec = &mut words_map
+        let normalized_word_spellings = &mut words_map
             .entry(normalized_characters)
             .or_default()
             .entry(NormalizedString(normalized_word.clone()))
-            .or_insert_with(|| (vec![], is_pangram))
-            .0;
-        match normalized_word_vec
+            .or_insert_with(|| NormalizedWord {
+                spellings: vec![],
+                is_pangram,
+            })
+            .spellings;
+        match normalized_word_spellings
             .binary_search_by(|existing_word| collator.collate(existing_word, &word))
         {
             Ok(_) => {}
-            Err(index) => normalized_word_vec.insert(index, word),
+            Err(index) => normalized_word_spellings.insert(index, word),
         }
     }
 
@@ -94,8 +102,8 @@ pub(crate) fn generate_games(words: Vec<String>) -> color_eyre::Result<Vec<Game>
             debug_assert!(secondary_letters.iter().all(|char| char != &'\0'));
 
             let mut game = Game {
-                main_letter: main_letter,
-                secondary_letters: secondary_letters,
+                main_letter,
+                secondary_letters,
                 words: Vec::new(),
             };
 
@@ -117,24 +125,25 @@ pub(crate) fn generate_games(words: Vec<String>) -> color_eyre::Result<Vec<Game>
                 if let Some(words_map) = words_map.get(&key) {
                     for (curr_key, curr_value) in words_map.iter() {
                         let curr_len = curr_key.0.len();
-                        let Err(index) = game.words.binary_search_by(|game_word| {
-                            match game_word.normalized.0.len().cmp(&curr_len) {
-                                Ordering::Equal => {
-                                    collator.collate(&game_word.normalized.0, &curr_key.0)
+                        if let Err(index) =
+                            game.words.binary_search_by(|game_word| {
+                                match game_word.normalized.0.len().cmp(&curr_len) {
+                                    Ordering::Equal => {
+                                        collator.collate(&game_word.normalized.0, &curr_key.0)
+                                    }
+                                    ordering => ordering,
                                 }
-                                ordering => ordering,
-                            }
-                        }) else {
-                            unreachable!();
+                            })
+                        {
+                            game.words.insert(
+                                index,
+                                Word {
+                                    original: curr_value.spellings.iter().join("/"),
+                                    normalized: curr_key.clone(),
+                                    is_pangram: curr_value.is_pangram,
+                                },
+                            );
                         };
-                        game.words.insert(
-                            index,
-                            Word {
-                                original: curr_value.0.iter().join("/"),
-                                normalized: curr_key.clone(),
-                                is_pangram: curr_value.1,
-                            },
-                        );
                     }
                 }
             }

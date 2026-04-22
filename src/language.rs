@@ -12,8 +12,9 @@ use ratatui::{
 
 use crate::normalize::NormalizedString;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Language {
+    #[default]
     Portuguese,
     English,
 }
@@ -31,6 +32,20 @@ impl Language {
         match self {
             Language::Portuguese => "pt",
             Language::English => "en",
+        }
+    }
+
+    pub(crate) fn previous(&self) -> Language {
+        match self {
+            Language::Portuguese => Language::English,
+            Language::English => Language::Portuguese,
+        }
+    }
+
+    pub(crate) fn next(&self) -> Language {
+        match self {
+            Language::Portuguese => Language::English,
+            Language::English => Language::Portuguese,
         }
     }
 

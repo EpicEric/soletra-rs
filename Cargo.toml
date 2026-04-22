@@ -2,13 +2,20 @@
 name = "soletra-rs"
 version = "0.1.0"
 edition = "2024"
+description = "TUI version of the game Soletra/Spelling Bee"
+repository = "https://github.com/EpicEric/soletra-rs"
+license = "MIT"
+authors = ["Eric Rodrigues Pires <eric@eric.dev.br>"]
+readme = "README.md"
+keywords = ["tui", "spelling-bee", "spelling", "game"]
+categories = ["games"]
 
 [dependencies]
 app_dirs2 = "2.5.5"
 async-channel = "2.5.0"
 async-compat = "0.2.5"
 color-eyre = "0.6.5"
-crossterm = "0.29.0"
+crossterm = { version = "0.29.0", features = ["event-stream"] }
 feruca = "0.11.5"
 itertools = "0.14.0"
 rand = "0.10.0"
