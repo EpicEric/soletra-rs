@@ -83,12 +83,12 @@ impl StatefulWidget for LanguageSelectWidget {
         let block_left = Block::bordered();
         let inner_left = block_left.inner(rect_left);
         block_left.render(rect_left, buf);
-        "".bold().into_centered_line().render(inner_left, buf);
+        "←".bold().into_centered_line().render(inner_left, buf);
 
         let block_right = Block::bordered();
         let inner_right = block_right.inner(rect_right);
         block_right.render(rect_right, buf);
-        "".bold().into_centered_line().render(inner_right, buf);
+        "→".bold().into_centered_line().render(inner_right, buf);
 
         Paragraph::new(self.language.to_string())
             .centered()

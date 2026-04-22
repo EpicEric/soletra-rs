@@ -5,6 +5,10 @@ TUI version of the game Soletra/Spelling Bee. Currently playable in:
 - Portuguese
 - English
 
+## Requisites
+
+- A terminal with a NerdFont.
+
 ## Controls
 
 Language selection screen:

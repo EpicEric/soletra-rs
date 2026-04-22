@@ -26,7 +26,6 @@ use std::{
     str::FromStr,
     time::{Duration, Instant},
 };
-use tempfile::NamedTempFile;
 use tui_scrollview::ScrollViewState;
 
 use crate::{
@@ -138,6 +137,11 @@ impl AppDir {
         self.0.join(format!("games_{}.json", language.shortcode()))
     }
 
+    fn get_games_temp_path(&self, language: Language) -> PathBuf {
+        self.0
+            .join(format!("games_{}.json.temp", language.shortcode()))
+    }
+
     fn get_save_path(&self, language: Language) -> PathBuf {
         self.0.join(format!("{}.json", language.shortcode()))
     }
@@ -232,8 +236,10 @@ impl App {
         loop {
             // Handle events
             while let Ok(event) = rx.try_recv() {
-                self.handle_event(event).await?;
-                if self.should_quit {
+                if let Err(error) = self.handle_event(event).await {
+                    crossterm::execute!(terminal.backend_mut(), DisableMouseCapture)?;
+                    return Err(error);
+                } else if self.should_quit {
                     crossterm::execute!(terminal.backend_mut(), DisableMouseCapture)?;
                     return Ok(());
                 }
@@ -382,7 +388,7 @@ impl App {
         self.areas.button_left = Rect::ZERO;
         self.areas.button_right = Rect::ZERO;
 
-        let data = self.data.as_mut().expect("no data in render_game");
+        let data = self.data.as_mut().expect("precondition: data exists");
         let game = data
             .active_games
             .get_mut(data.current_game)
@@ -749,13 +755,15 @@ async fn generate_games_from_words(
 ) {
     match smol::unblock(move || {
         let games = generate_games(words)?;
-        let tmp_file = NamedTempFile::new()?;
+        let app_dir = AppDir::new()?;
+        let tmp_path = app_dir.get_games_temp_path(language);
+        let tmp_file = File::create(&tmp_path)?;
         let mut writer = BufWriter::new(&tmp_file);
         serde_json::to_writer(&mut writer, &games)?;
         writer.flush()?;
         drop(writer);
-        let (_, tmp_path) = tmp_file.keep()?;
-        std::fs::rename(tmp_path, AppDir::new()?.get_games_path(language))?;
+        drop(tmp_file);
+        std::fs::rename(tmp_path, app_dir.get_games_path(language))?;
         Ok(games)
     })
     .await

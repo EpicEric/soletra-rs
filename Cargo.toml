@@ -1,9 +1,9 @@
 [package]
 name = "soletra-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "TUI version of the game Soletra/Spelling Bee"
-repository = "https://github.com/EpicEric/soletra-rs"
+repository = "https://git.eric.dev.br/EpicEric/soletra-rs"
 license = "MIT"
 authors = ["Eric Rodrigues Pires <eric@eric.dev.br>"]
 readme = "README.md"
@@ -27,7 +27,6 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 smol = "2.0.2"
 tachyonfx = "0.25.0"
-tempfile = "3.27.0"
 throbber-widgets-tui = "0.11.0"
 tui-overlay = "0.1.2"
 tui-scrollview = "0.6.3"
