@@ -1,3 +1,19 @@
+// soletra-rs: TUI version of the game Soletra/Spelling Bee
+// Copyright (C) 2026 Eric Rodrigues Pires
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU Affero General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option)
+// any later version.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+// more details.
+//
+// You should have received a copy of the GNU Affero General Public License along
+// with this program. If not, see <https://www.gnu.org/licenses/>.
+
 use async_compat::Compat;
 use color_eyre::eyre::eyre;
 use crossterm::event::{
@@ -33,8 +49,8 @@ use crate::{
     generate::generate_games,
     language::Language,
     widgets::{
-        ActionsWidget, GameOverWidget, GuessResultWidget, GuessesWidget, HoneycombWidget,
-        InputWidget, InputWidgetState, LanguageSelectWidget,
+        ActionsWidget, GameOverWidget, GuessResultWidget, GuessesWidget, HelpWidget,
+        HoneycombWidget, InputWidget, InputWidgetState, LanguageSelectWidget,
     },
 };
 
@@ -77,6 +93,7 @@ pub(crate) struct App {
     rows: usize,
     scroll_view_state: ScrollViewState,
     guess_result_state: tui_overlay::OverlayState,
+    help_state: tui_overlay::OverlayState,
     game_over_state: tui_overlay::OverlayState,
     effects: tachyonfx::EffectManager<()>,
     elapsed: Duration,
@@ -211,6 +228,9 @@ impl App {
             rows: 1,
             scroll_view_state: Default::default(),
             guess_result_state: tui_overlay::OverlayState::new()
+                .with_duration(Duration::from_millis(150))
+                .with_easing(tui_overlay::Easing::EaseInOut),
+            help_state: tui_overlay::OverlayState::new()
                 .with_duration(Duration::from_millis(150))
                 .with_easing(tui_overlay::Easing::EaseInOut),
             game_over_state: tui_overlay::OverlayState::new()
@@ -394,6 +414,7 @@ impl App {
             .get_mut(data.current_game)
             .expect("length checked");
         let guess_result_state = &mut self.guess_result_state;
+        let help_state = &mut self.help_state;
         let game_over_state = &mut self.game_over_state;
         let is_game_over = game_over_state.is_open();
 
@@ -475,6 +496,16 @@ impl App {
             elapsed: self.elapsed,
         };
         frame.render_stateful_widget(guesses, right_area, &mut self.rows);
+
+        let help = tui_overlay::Overlay::new()
+            .anchor(tui_overlay::Anchor::Center)
+            .width(Constraint::Percentage(60))
+            .height(Constraint::Percentage(50))
+            .backdrop(tui_overlay::Backdrop::new(ratatui::style::Color::Black));
+        frame.render_stateful_widget(help, inner_area, help_state);
+        if let Some(inner) = help_state.inner_area() {
+            frame.render_widget(HelpWidget {}, inner);
+        }
 
         let game_over = tui_overlay::Overlay::new()
             .anchor(tui_overlay::Anchor::Center)
