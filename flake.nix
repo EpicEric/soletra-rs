@@ -20,8 +20,10 @@
   inputs = { };
 
   outputs =
-    { self, ... }:
+    { self, ... }@args:
     let
+      inputs = (import ./.tack) { overrides = args.tackOverrides or { }; };
+
       systems = [
         "x86_64-linux"
         "aarch64-linux"
@@ -45,12 +47,24 @@
           ) acc (builtins.attrNames fSystem)
         ) { } systems);
     in
-    eachSystem (system: {
-      packages.${system} = {
-        default = import ./. { inherit system; };
-        soletra-rs = self.packages.${system}.default;
-      };
+    eachSystem (
+      system:
+      let
+        pkgs = import inputs.nixpkgs {
+          inherit system;
+          overlays = [ (import inputs.rust-overlay) ];
+        };
+        craneLib = (import inputs.crane { inherit pkgs; }).overrideToolchain (
+          p: p.rust-bin.stable.latest.default
+        );
+      in
+      {
+        packages.${system} = {
+          default = import ./. { inherit pkgs craneLib; };
+          soletra-rs = self.packages.${system}.default;
+        };
 
-      devShells.${system}.default = import ./shell.nix { inherit system; };
-    });
+        devShells.${system}.default = import ./shell.nix { inherit pkgs craneLib; };
+      }
+    );
 }

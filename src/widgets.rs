@@ -283,17 +283,20 @@ impl StatefulWidget for ActionsWidget {
         let block_backspace = Block::bordered();
         let inner_backspace = block_backspace.inner(rect_backspace);
         block_backspace.render(rect_backspace, buf);
-        "󰁮".bold().into_centered_line().render(inner_backspace, buf);
+        "🔙"
+            .bold()
+            .into_centered_line()
+            .render(inner_backspace, buf);
 
         let block_shuffle = Block::bordered();
         let inner_shuffle = block_shuffle.inner(rect_shuffle);
         block_shuffle.render(rect_shuffle, buf);
-        "".bold().into_centered_line().render(inner_shuffle, buf);
+        "🔁".bold().into_centered_line().render(inner_shuffle, buf);
 
         let block_reset_shuffle = Block::bordered();
         let inner_reset_shuffle = block_reset_shuffle.inner(rect_reset_shuffle);
         block_reset_shuffle.render(rect_reset_shuffle, buf);
-        ""
+        "🔂"
             .bold()
             .into_centered_line()
             .render(inner_reset_shuffle, buf);
@@ -301,7 +304,7 @@ impl StatefulWidget for ActionsWidget {
         let block_submit = Block::bordered();
         let inner_submit = block_submit.inner(rect_submit);
         block_submit.render(rect_submit, buf);
-        "".bold().into_centered_line().render(inner_submit, buf);
+        "✅".bold().into_centered_line().render(inner_submit, buf);
     }
 }
 
